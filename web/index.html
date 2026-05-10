@@ -1,175 +1,1103 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Solana Trinity Sniper HQ - Internal Focus v8.1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChainBot Command Deck</title>
     <style>
-        :root { --bg: #0d1117; --card: #161b22; --text: #c9d1d9; --accent: #238636; --highlight: #58a6ff; --dim: #8b949e; --danger: #f85149; --warning: #f1e05a; }
-        html, body { height: 100%; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; overflow: hidden; box-sizing: border-box; }
-        .header { height: 50px; background: #1c2128; border-bottom: 2px solid var(--accent); padding: 0 20px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; }
-        .wallet-bar { display: flex; gap: 20px; align-items: center; }
-        .w-item { display: flex; flex-direction: column; }
-        .w-label { font-size: 9px; color: var(--dim); text-transform: uppercase; }
-        .w-val { font-size: 16px; font-weight: bold; font-family: monospace; }
-        .tabs { display: flex; gap: 5px; margin-top: 10px; }
-        .tab { padding: 6px 15px; background: #161b22; border-radius: 5px 5px 0 0; cursor: pointer; border: 1px solid #30363d; font-size: 12px; font-weight: bold; color: var(--dim); }
-        .tab.active { background: #30363d; color: white; border-bottom: 2px solid var(--highlight); }
-        .panel { display: none; height: calc(100vh - 145px); border-radius: 0 0 8px 8px; overflow: hidden; min-height: 0; }
-        .panel.active { display: block; }
-        .grid-main { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 12px; height: 100%; min-height: 0; }
-        .side-stack { display: grid; grid-template-rows: 1fr 0.8fr 0.8fr; gap: 12px; height: 100%; min-height: 0; }
-        .grid-analytics { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 12px; height: 100%; min-height: 0; }
-        .analytics-stack { display: grid; grid-template-rows: auto auto 1fr; gap: 12px; padding: 12px; overflow-y: auto; }
-        .column { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
-        .col-header { padding: 8px 15px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 13px; font-weight: bold; }
-        .list-box { flex: 1; min-height: 0; overflow-y: auto; padding: 5px; overscroll-behavior: contain; }
-        .list-box::-webkit-scrollbar { width: 9px; height: 9px; }
-        .list-box::-webkit-scrollbar-thumb { background: #30363d; border-radius: 999px; }
-        .list-box::-webkit-scrollbar-thumb:hover { background: #58a6ff66; }
-        .row { display: grid; grid-template-columns: 70px 60px 120px 85px 75px 70px 70px 55px 45px 1fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #21262d; align-items: center; font-size: 11px; }
-        .row:hover { background: #1c2128; }
-        .symbol-box { display: flex; flex-direction: column; }
-        .symbol { font-weight: bold; color: #f0f6fc; font-size: 12px; }
-        .addr { font-family: monospace; font-size: 9px; color: var(--dim); cursor: pointer; }
-        .val { font-family: 'JetBrains Mono', monospace; }
-        .score-pill { padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold; background: #23863622; color: #7ee787; border: 1px solid #238636; }
-        .btn { text-decoration: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; border: none; cursor: pointer; text-align: center; }
-        .btn-internal { background: #e028f0; } /* Pump.fun 标志紫色 */
-        .p-row { display: grid; grid-template-columns: 90px 90px 110px 85px 110px 75px 80px 90px 90px 80px 1fr; gap: 8px; padding: 12px 18px; border-bottom: 1px solid #21262d; align-items: center; font-size: 12px; }
-        .source-pill { display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: bold; border: 1px solid #30363d; color: var(--dim); }
-        .source-live { color: #7ee787; border-color: #238636; background: #23863622; }
-        .source-fallback { color: var(--warning); border-color: #9e6a03; background: #f1e05a22; }
-        .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; }
-        .metric-card { background: #11161c; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }
-        .metric-label { font-size: 10px; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
-        .metric-value { font-size: 22px; font-weight: bold; font-family: monospace; }
-        .metric-section { border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
-        .metric-section-title { padding: 8px 12px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 12px; font-weight: bold; }
-        .history-row { padding: 12px; border-bottom: 1px solid #21262d; }
-        .history-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-        .history-meta { font-size: 11px; color: var(--dim); }
-        .history-reason { font-size: 11px; color: var(--text); }
-        .watch-card { margin: 8px; padding: 12px; background: #1c2128; border-radius: 8px; border: 1px solid #30363d; }
-        .watch-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-        .watch-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-size: 11px; margin-bottom: 8px; }
-        .watch-reason { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
-        .news-card { margin: 8px; padding: 10px; background: #11161c; border-radius: 8px; border: 1px solid #30363d; }
-        .news-title { font-size: 11px; font-weight: bold; color: #f0f6fc; margin-bottom: 6px; line-height: 1.35; }
-        .news-meta { font-size: 10px; color: var(--dim); }
+        :root {
+            --bg: #07111f;
+            --bg-elevated: #0d1b2f;
+            --panel: rgba(11, 27, 47, 0.92);
+            --panel-strong: rgba(15, 35, 61, 0.96);
+            --line: rgba(139, 168, 204, 0.18);
+            --text: #e6eef8;
+            --muted: #8ca3bf;
+            --accent: #28c7b7;
+            --accent-2: #5aa8ff;
+            --success: #7ce38b;
+            --warning: #ffcc66;
+            --danger: #ff7d7d;
+            --chip: rgba(90, 168, 255, 0.12);
+            --shadow: 0 20px 45px rgba(2, 7, 15, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Aptos", "Segoe UI Variable", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top right, rgba(40, 199, 183, 0.12), transparent 28%),
+                radial-gradient(circle at top left, rgba(90, 168, 255, 0.16), transparent 24%),
+                linear-gradient(180deg, #08101c 0%, #07111f 100%);
+            overflow: hidden;
+        }
+
+        .app-shell {
+            height: 100%;
+            padding: 18px;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 14px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            gap: 16px;
+            padding: 18px 20px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(13, 27, 47, 0.92), rgba(8, 17, 31, 0.96));
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+        }
+
+        .brand-block {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-width: 240px;
+        }
+
+        .eyebrow {
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .brand-title {
+            margin-top: 8px;
+            font-size: 28px;
+            line-height: 1.05;
+            font-weight: 700;
+        }
+
+        .brand-subtitle {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 13px;
+            max-width: 540px;
+        }
+
+        .mode-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .mode-pill, .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(40, 199, 183, 0.12);
+            border: 1px solid rgba(40, 199, 183, 0.2);
+            font-size: 11px;
+            color: var(--text);
+        }
+
+        .top-metrics {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .top-metric {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px 16px;
+            background: rgba(10, 22, 39, 0.74);
+        }
+
+        .metric-kicker {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .metric-number {
+            margin-top: 10px;
+            font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .metric-note {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab {
+            border: 1px solid var(--line);
+            background: rgba(11, 27, 47, 0.74);
+            color: var(--muted);
+            border-radius: 999px;
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: 160ms ease;
+        }
+
+        .tab.active {
+            color: var(--text);
+            border-color: rgba(90, 168, 255, 0.28);
+            background: linear-gradient(135deg, rgba(90, 168, 255, 0.22), rgba(40, 199, 183, 0.16));
+        }
+
+        .tab:hover {
+            transform: translateY(-1px);
+            color: var(--text);
+        }
+
+        .panel {
+            display: none;
+            min-height: 0;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .layout-radar {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+            gap: 14px;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .layout-positions {
+            height: 100%;
+        }
+
+        .layout-analytics {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.92fr) minmax(360px, 1.08fr);
+            gap: 14px;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .stack {
+            display: grid;
+            gap: 14px;
+            min-height: 0;
+        }
+
+        .stack.radar-side {
+            grid-template-rows: 1fr 0.82fr 0.78fr;
+        }
+
+        .stack.analytics-side {
+            grid-template-rows: 0.78fr 1.22fr;
+        }
+
+        .card {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(15, 35, 61, 0.95), rgba(11, 27, 47, 0.86));
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .card-caption {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .table-header,
+        .table-row {
+            display: grid;
+            gap: 10px;
+            padding: 10px 18px;
+            align-items: center;
+        }
+
+        .table-header {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            background: rgba(15, 35, 61, 0.96);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .table-body {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .table-row {
+            font-size: 12px;
+            border-bottom: 1px solid rgba(139, 168, 204, 0.08);
+            transition: 120ms ease;
+        }
+
+        .table-row:hover {
+            background: rgba(90, 168, 255, 0.06);
+        }
+
+        .feed-grid {
+            grid-template-columns: 96px 70px 140px 90px 92px 64px 72px 68px 58px 100px;
+        }
+
+        .position-grid {
+            grid-template-columns: 98px 108px 104px 78px 104px 76px 88px 88px 82px 88px 90px;
+        }
+
+        .symbol-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .symbol {
+            font-weight: 700;
+        }
+
+        .mono {
+            font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+        }
+
+        .tiny {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: var(--chip);
+            border: 1px solid rgba(90, 168, 255, 0.18);
+            font-size: 11px;
+            line-height: 1;
+        }
+
+        .chip.good {
+            color: var(--success);
+            border-color: rgba(124, 227, 139, 0.22);
+            background: rgba(124, 227, 139, 0.12);
+        }
+
+        .chip.warn {
+            color: var(--warning);
+            border-color: rgba(255, 204, 102, 0.22);
+            background: rgba(255, 204, 102, 0.12);
+        }
+
+        .chip.bad {
+            color: var(--danger);
+            border-color: rgba(255, 125, 125, 0.22);
+            background: rgba(255, 125, 125, 0.12);
+        }
+
+        .list {
+            flex: 1;
+            overflow: auto;
+            padding: 10px;
+        }
+
+        .watch-card,
+        .signal-card,
+        .news-card,
+        .history-card,
+        .decision-card {
+            border: 1px solid var(--line);
+            background: rgba(8, 20, 36, 0.75);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .watch-card:last-child,
+        .signal-card:last-child,
+        .news-card:last-child,
+        .history-card:last-child,
+        .decision-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .decision-card {
+            cursor: pointer;
+            transition: 140ms ease;
+        }
+
+        .decision-card.active {
+            border-color: rgba(40, 199, 183, 0.42);
+            background: rgba(10, 27, 43, 0.9);
+            box-shadow: inset 0 0 0 1px rgba(40, 199, 183, 0.14);
+        }
+
+        .decision-card:hover {
+            transform: translateY(-1px);
+        }
+
+        .watch-top,
+        .history-head,
+        .decision-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .watch-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .watch-metric {
+            padding: 8px;
+            border-radius: 12px;
+            background: rgba(90, 168, 255, 0.06);
+            font-size: 11px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .button,
+        .ghost-button,
+        .toolbar-input,
+        .toolbar-select {
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            font: inherit;
+        }
+
+        .button,
+        .ghost-button {
+            cursor: pointer;
+            padding: 8px 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: 120ms ease;
+        }
+
+        .button {
+            background: linear-gradient(135deg, rgba(40, 199, 183, 0.24), rgba(90, 168, 255, 0.22));
+            color: var(--text);
+        }
+
+        .ghost-button {
+            background: rgba(90, 168, 255, 0.08);
+            color: var(--text);
+        }
+
+        .button:hover,
+        .ghost-button:hover {
+            transform: translateY(-1px);
+        }
+
+        .button:disabled,
+        .ghost-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+            transform: none;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 14px 18px 0;
+        }
+
+        .toolbar-input,
+        .toolbar-select {
+            background: rgba(8, 20, 36, 0.92);
+            color: var(--text);
+            padding: 9px 12px;
+            min-height: 38px;
+        }
+
+        .toolbar-input {
+            min-width: 220px;
+            flex: 1;
+        }
+
+        .toolbar-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 18px 0;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .decision-pager {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 18px 16px;
+            border-top: 1px solid var(--line);
+        }
+
+        .decision-workbench {
+            display: grid;
+            grid-template-columns: minmax(0, 0.98fr) minmax(280px, 1.02fr);
+            gap: 14px;
+            padding: 0 18px 16px;
+            min-height: 0;
+            flex: 1;
+        }
+
+        .decision-pane {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .decision-pane .list {
+            padding: 10px 0 0;
+        }
+
+        .decision-detail {
+            min-height: 0;
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(8, 20, 36, 0.82);
+            padding: 16px;
+        }
+
+        .detail-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .detail-subtitle {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .detail-stack {
+            display: grid;
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .detail-section {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(10, 22, 39, 0.72);
+        }
+
+        .detail-section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .detail-kv {
+            padding: 10px;
+            border-radius: 12px;
+            background: rgba(90, 168, 255, 0.07);
+        }
+
+        .detail-kv-label {
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .detail-kv-value {
+            margin-top: 6px;
+            font-size: 12px;
+            word-break: break-word;
+        }
+
+        .detail-pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #cfe0f5;
+        }
+
+        .case-timeline {
+            display: grid;
+            gap: 10px;
+        }
+
+        .case-event {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(90, 168, 255, 0.06);
+        }
+
+        .case-event.highlight {
+            border-color: rgba(40, 199, 183, 0.42);
+            background: rgba(40, 199, 183, 0.08);
+        }
+
+        .case-event-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .case-event-title {
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .case-event-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .metric-section {
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            overflow: hidden;
+            background: rgba(8, 20, 36, 0.72);
+        }
+
+        .metric-section-title {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(13, 27, 47, 0.9);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .metric-card {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(10, 22, 39, 0.8);
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            margin-top: 8px;
+            font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .outcome-line {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .decision-reason {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .decision-context,
+        .history-context,
+        .news-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .empty-state {
+            padding: 18px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .sync-note {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        @media (max-width: 1200px) {
+            body {
+                overflow: auto;
+            }
+
+            .app-shell {
+                height: auto;
+            }
+
+            .topbar,
+            .layout-radar,
+            .layout-analytics {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar {
+                flex-direction: column;
+            }
+
+            .top-metrics {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .stack.radar-side,
+            .stack.analytics-side {
+                grid-template-rows: none;
+            }
+
+            .decision-workbench {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .app-shell {
+                padding: 12px;
+            }
+
+            .top-metrics,
+            .metric-grid,
+            .watch-grid,
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .table-header,
+            .table-row,
+            .feed-grid,
+            .position-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .table-header {
+                display: none;
+            }
+
+            .table-row {
+                gap: 6px;
+                padding: 14px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="wallet-bar">
-            <div class="w-item"><span class="w-label">初始本金</span><span class="w-val">$200.00</span></div>
-            <div class="w-item"><span class="w-label">当前余额</span><span class="w-val" id="w-bal" style="color:var(--highlight)">$0.00</span></div>
-            <div class="w-item"><span class="w-label">今日盈亏</span><span class="w-val" id="w-pnl">$0.00</span></div>
-            <div class="w-item"><span class="w-label">模拟成交</span><span class="w-val" id="w-count">0/0</span></div>
-        </div>
-        <div id="sync-info" style="font-size:10px; color:var(--dim)">Connecting...</div>
-    </div>
-
-    <div class="tabs">
-        <div class="tab active" onclick="switchTab('radar', event)">📡 实时内盘雷达</div>
-        <div class="tab" onclick="switchTab('portfolio', event)">💼 模拟持仓/逃生舱</div>
-        <div class="tab" onclick="switchTab('analytics', event)">📈 策略分析</div>
-    </div>
-
-    <div id="panel-radar" class="panel active">
-        <div class="grid-main">
-            <div class="column">
-                <div class="col-header">📡 内盘实时流 <small style="color:var(--dim); font-weight:normal;">(点击行直跳 Pump.fun K线)</small></div>
-                <div class="row" style="background:#161b22; color:var(--dim); font-weight:bold; height:20px; padding:5px 12px;">
-                    <div>监控时间</div><div>币龄</div><div>代币/地址</div><div>价格</div><div>流动性</div><div>Top10</div><div>Holders</div><div>风险</div><div>得分</div><div style="text-align:right">操作</div>
-                </div>
-                <div id="list-all" class="list-box"></div>
-            </div>
-            <div class="side-stack">
-                <div class="column" style="border-top: 3px solid var(--highlight);">
-                    <div class="col-header" style="color:var(--highlight);">👀 观察池状态</div>
-                    <div id="watch-list" class="list-box"></div>
-                </div>
-                <div class="column" style="border-top: 3px solid #ff7b72;">
-                    <div class="col-header" style="color:#ff7b72;">📰 新闻事件雷达</div>
-                    <div id="list-news" class="list-box"></div>
-                </div>
-                <div class="column" style="border-top: 3px solid var(--warning);">
-                    <div class="col-header" style="color:var(--warning);">🔥 策略信号流</div>
-                    <div id="list-opps" class="list-box"></div>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand-block">
+                <div class="eyebrow">Solana Launch Monitoring</div>
+                <div class="brand-title">ChainBot Command Deck</div>
+                <div class="brand-subtitle">Productized radar, portfolio, and decision telemetry for the current strategy loop.</div>
+                <div class="mode-row">
+                    <div id="mode-pill" class="mode-pill">Mode: paper</div>
+                    <div id="service-pill" class="status-pill">Service booting</div>
                 </div>
             </div>
-        </div>
-    </div>
+            <div class="top-metrics">
+                <div class="top-metric">
+                    <div class="metric-kicker">Cash Balance</div>
+                    <div id="wallet-balance" class="metric-number">$0.00</div>
+                    <div id="wallet-balance-note" class="metric-note">Waiting for wallet data</div>
+                </div>
+                <div class="top-metric">
+                    <div class="metric-kicker">Net PnL</div>
+                    <div id="wallet-pnl" class="metric-number">$0.00</div>
+                    <div class="metric-note">Compared with initial capital</div>
+                </div>
+                <div class="top-metric">
+                    <div class="metric-kicker">Trade Count</div>
+                    <div id="wallet-count" class="metric-number">0 / 0</div>
+                    <div class="metric-note">Buys / sells</div>
+                </div>
+                <div class="top-metric">
+                    <div class="metric-kicker">Last Sync</div>
+                    <div id="sync-time" class="metric-number">--:--:--</div>
+                    <div id="sync-note" class="metric-note">Awaiting first snapshot</div>
+                </div>
+            </div>
+        </header>
 
-    <div id="panel-portfolio" class="panel column">
-        <div class="col-header" style="color:var(--danger)">🚨 持仓自动管理</div>
-        <div class="p-row" style="background:#161b22; color:var(--dim); font-weight:bold; padding:8px 18px;">
-            <div>代币</div>
-            <div>买入时间</div>
-            <div>买入价格</div>
-            <div>买入数量</div>
-            <div>当前价格</div>
-            <div>行情源</div>
-            <div>当前价值</div>
-            <div>浮盈金额</div>
-            <div>浮盈幅度</div>
-            <div>底仓</div>
-            <div style="text-align:right">操作</div>
-        </div>
-        <div id="list-portfolio" class="list-box"></div>
-    </div>
+        <nav class="tabs">
+            <button class="tab active" data-panel="radar" onclick="switchTab('radar', event)">Radar</button>
+            <button class="tab" data-panel="positions" onclick="switchTab('positions', event)">Positions</button>
+            <button class="tab" data-panel="analytics" onclick="switchTab('analytics', event)">Analytics</button>
+        </nav>
 
-    <div id="panel-analytics" class="panel">
-        <div class="grid-analytics">
-            <div class="column">
-                <div class="col-header">📈 策略表现</div>
-                <div class="analytics-stack">
-                    <div class="metric-section">
-                        <div class="metric-section-title">已实现收益</div>
-                        <div id="performance-realized" class="metric-grid"></div>
+        <main id="panel-radar" class="panel active">
+            <div class="layout-radar">
+                <section class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Live Feed</div>
+                            <div class="card-caption">Newest token snapshots, quality, ownership concentration, and bundle risk.</div>
+                        </div>
+                        <div class="sync-note">Auto-refresh every 2 seconds</div>
                     </div>
-                    <div class="metric-section">
-                        <div class="metric-section-title">当前浮动收益</div>
-                        <div id="performance-floating" class="metric-grid"></div>
+                    <div class="table-header feed-grid">
+                        <div>Seen</div>
+                        <div>Age</div>
+                        <div>Token</div>
+                        <div>Price</div>
+                        <div>Liquidity</div>
+                        <div>Top10</div>
+                        <div>Holders</div>
+                        <div>Risk</div>
+                        <div>Score</div>
+                        <div>Action</div>
                     </div>
-                    <div class="metric-section">
-                        <div class="metric-section-title">策略质量</div>
-                        <div id="performance-quality" class="metric-grid"></div>
-                    </div>
+                    <div id="list-all" class="table-body"></div>
+                </section>
+
+                <div class="stack radar-side">
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Watchlist State</div>
+                                <div class="card-caption">Observation candidates that are still earning conviction.</div>
+                            </div>
+                        </div>
+                        <div id="watch-list" class="list"></div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Narrative Radar</div>
+                                <div class="card-caption">Active news and KOL events influencing scoring.</div>
+                            </div>
+                        </div>
+                        <div id="list-news" class="list"></div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Opportunity Signals</div>
+                                <div class="card-caption">Structured watch, reject, and buy signals from the engine.</div>
+                            </div>
+                        </div>
+                        <div id="list-opps" class="list"></div>
+                    </section>
                 </div>
             </div>
-            <div class="column">
-                <div class="col-header">🧾 最近交易与原因</div>
-                <div id="history-list" class="list-box"></div>
+        </main>
+
+        <main id="panel-positions" class="panel">
+            <div class="layout-positions">
+                <section class="card" style="height: 100%;">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Portfolio Monitor</div>
+                            <div class="card-caption">Open positions, live pricing source, unrealized PnL, and moonbag state.</div>
+                        </div>
+                    </div>
+                    <div class="table-header position-grid">
+                        <div>Token</div>
+                        <div>Entry Time</div>
+                        <div>Entry Price</div>
+                        <div>Qty</div>
+                        <div>Current</div>
+                        <div>Source</div>
+                        <div>Value</div>
+                        <div>PnL USD</div>
+                        <div>PnL %</div>
+                        <div>Moonbag</div>
+                        <div>Action</div>
+                    </div>
+                    <div id="list-portfolio" class="table-body"></div>
+                </section>
             </div>
-        </div>
+        </main>
+
+        <main id="panel-analytics" class="panel">
+            <div class="layout-analytics">
+                <section class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Performance Quality</div>
+                            <div class="card-caption">Realized, floating, and risk-adjusted performance summaries.</div>
+                        </div>
+                    </div>
+                    <div class="list">
+                        <div class="metric-section">
+                            <div class="metric-section-title">Realized</div>
+                            <div id="performance-realized" class="metric-grid"></div>
+                        </div>
+                        <div class="metric-section" style="margin-top: 12px;">
+                            <div class="metric-section-title">Floating</div>
+                            <div id="performance-floating" class="metric-grid"></div>
+                        </div>
+                        <div class="metric-section" style="margin-top: 12px;">
+                            <div class="metric-section-title">Quality</div>
+                            <div id="performance-quality" class="metric-grid"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="stack analytics-side">
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Recent Trades</div>
+                                <div class="card-caption">Execution history with the structured reason already attached to each trade.</div>
+                            </div>
+                        </div>
+                        <div id="history-list" class="list"></div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Decision Timeline</div>
+                                <div class="card-caption">Blocked, skipped, and executed decisions with reasons and context.</div>
+                            </div>
+                        </div>
+                        <div class="toolbar">
+                            <select id="decision-category" class="toolbar-select" onchange="applyDecisionFilters()">
+                                <option value="">All categories</option>
+                                <option value="entry">Entry</option>
+                                <option value="exit">Exit</option>
+                            </select>
+                            <select id="decision-outcome" class="toolbar-select" onchange="applyDecisionFilters()">
+                                <option value="">All outcomes</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="skipped">Skipped</option>
+                                <option value="executed">Executed</option>
+                            </select>
+                            <input id="decision-search" class="toolbar-input" type="text" placeholder="Search symbol, address, or reason" onkeydown="if (event.key === 'Enter') applyDecisionFilters()">
+                            <button class="button" onclick="applyDecisionFilters()">Apply</button>
+                            <button class="ghost-button" onclick="resetDecisionFilters()">Reset</button>
+                        </div>
+                        <div class="toolbar-meta">
+                            <div id="decision-summary">Loading decisions...</div>
+                            <div id="decision-filter-note">No filter applied</div>
+                        </div>
+                        <div class="decision-workbench">
+                            <div class="decision-pane">
+                                <div id="decision-list" class="list"></div>
+                                <div class="decision-pager">
+                                    <button id="decision-prev" class="ghost-button" onclick="moveDecisionPage(-1)">Previous</button>
+                                    <div id="decision-page-info" class="sync-note">Page 1</div>
+                                    <button id="decision-next" class="ghost-button" onclick="moveDecisionPage(1)">Next</button>
+                                </div>
+                            </div>
+                            <div id="decision-detail" class="decision-detail">
+                                <div class="empty-state">Select a decision to inspect its replay.</div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script>
-        function switchTab(name, e) {
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('panel-' + name).classList.add('active');
-            if(e) e.target.classList.add('active');
+        const dashboardState = {
+            activePanel: "radar",
+            selectedDecisionId: null,
+            selectedDecisionDetail: null,
+            decisionFilters: {
+                category: "",
+                outcome: "",
+                search: "",
+                limit: 8,
+                offset: 0,
+            },
+        };
+
+        function switchTab(name, event) {
+            dashboardState.activePanel = name;
+            document.querySelectorAll(".panel").forEach((panel) => panel.classList.remove("active"));
+            document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("active"));
+            document.getElementById(`panel-${name}`).classList.add("active");
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add("active");
+            }
+        }
+
+        function shortAddr(value) {
+            const addr = String(value || "");
+            if (addr.length <= 10) {
+                return addr || "-";
+            }
+            return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+            }[char]));
+        }
+
+        function safeText(value, fallback = "-") {
+            const text = String(value ?? "").trim();
+            return escapeHtml(text || fallback);
+        }
+
+        function safeUrl(value, fallback = "#") {
+            try {
+                if (!value) {
+                    return fallback;
+                }
+                const url = new URL(String(value), window.location.origin);
+                if (url.protocol === "http:" || url.protocol === "https:") {
+                    return url.href;
+                }
+            } catch (error) {
+                console.debug("Dropped invalid url", error);
+            }
+            return fallback;
+        }
+
+        function money(value, digits = 2) {
+            const num = Number(value || 0);
+            return `$${num.toFixed(digits)}`;
         }
 
         function formatPct(value) {
             const num = Number(value || 0);
-            return `${num >= 0 ? '+' : ''}${(num * 100).toFixed(1)}%`;
+            return `${num >= 0 ? "+" : ""}${(num * 100).toFixed(1)}%`;
         }
 
-        function riskColor(item) {
-            if ((item.bundle_risk_label || '') === '待查') return 'var(--dim)';
-            return (item.bundle_risk_score || 0) >= 0.75 ? '#f85149' : ((item.bundle_risk_score || 0) >= 0.45 ? '#f1e05a' : '#7ee787');
+        function formatPctRaw(value) {
+            const num = Number(value || 0);
+            return `${num >= 0 ? "+" : ""}${num.toFixed(1)}%`;
         }
 
         function formatHold(seconds) {
-            const s = Number(seconds || 0);
-            if (s < 60) return `${Math.floor(s)}s`;
-            if (s < 3600) return `${Math.floor(s / 60)}m`;
-            if (s < 86400) return `${Math.floor(s / 3600)}h`;
-            return `${Math.floor(s / 86400)}d`;
+            const value = Number(seconds || 0);
+            if (value < 60) {
+                return `${Math.floor(value)}s`;
+            }
+            if (value < 3600) {
+                return `${Math.floor(value / 60)}m`;
+            }
+            if (value < 86400) {
+                return `${Math.floor(value / 3600)}h`;
+            }
+            return `${Math.floor(value / 86400)}d`;
+        }
+
+        function riskBadge(item) {
+            const score = Number(item.bundle_risk_score || 0);
+            const label = item.bundle_risk_label || "pending";
+            if (score >= 0.75) {
+                return `<span class="chip bad">${label}</span>`;
+            }
+            if (score >= 0.45) {
+                return `<span class="chip warn">${label}</span>`;
+            }
+            return `<span class="chip good">${label}</span>`;
+        }
+
+        function outcomeBadge(item) {
+            const outcome = String(item.outcome || "").toLowerCase();
+            const category = String(item.category || "").toLowerCase();
+            const label = `${category || "decision"} · ${outcome || "unknown"}`;
+            if (outcome === "executed") {
+                return `<span class="chip good">${label}</span>`;
+            }
+            if (outcome === "blocked") {
+                return `<span class="chip bad">${label}</span>`;
+            }
+            return `<span class="chip warn">${label}</span>`;
+        }
+
+        function sourceBadge(value) {
+            const source = String(value || "unknown");
+            const good = source.toLowerCase() === "pumpportal";
+            return `<span class="chip ${good ? "good" : "warn"}">${source.toUpperCase()}</span>`;
         }
 
         function renderMetricGrid(targetId, items) {
@@ -178,171 +1106,509 @@
                     <div class="metric-label">${label}</div>
                     <div class="metric-value">${value}</div>
                 </div>
-            `).join('');
+            `).join("");
+        }
+
+        function formatDecisionContext(decision) {
+            const context = decision.context || {};
+            const bits = [];
+            if (context.strategy_mode) bits.push(`mode ${context.strategy_mode}`);
+            if (context.execution_mode) bits.push(`exec ${context.execution_mode}`);
+            if (context.position_size_usd !== undefined && context.position_size_usd !== null) bits.push(`size ${money(context.position_size_usd)}`);
+            if (context.score !== undefined) bits.push(`score ${Number(context.score).toFixed(0)}`);
+            if (context.liquidity_usd !== undefined) bits.push(`liq ${money(context.liquidity_usd)}`);
+            if (context.pnl_pct !== undefined) bits.push(`pnl ${formatPct(context.pnl_pct)}`);
+            if (context.sell_fraction !== undefined && Number(context.sell_fraction) > 0) bits.push(`sold ${(Number(context.sell_fraction) * 100).toFixed(0)}%`);
+            if (context.hold_seconds !== undefined && Number(context.hold_seconds) > 0) bits.push(`hold ${formatHold(context.hold_seconds)}`);
+            if (context.execution_reason) bits.push(context.execution_reason);
+            if (context.entry_reason) bits.push(context.entry_reason);
+            if (context.scalp_reason) bits.push(context.scalp_reason);
+            return bits.join(" | ");
+        }
+
+        function renderDetailKv(label, value) {
+            return `
+                <div class="detail-kv">
+                    <div class="detail-kv-label">${safeText(label)}</div>
+                    <div class="detail-kv-value">${safeText(value)}</div>
+                </div>
+            `;
+        }
+
+        function renderDetailSection(title, items) {
+            return `
+                <section class="detail-section">
+                    <div class="detail-section-title">${safeText(title)}</div>
+                    <div class="detail-grid">
+                        ${items.join("")}
+                    </div>
+                </section>
+            `;
+        }
+
+        function prettyJson(value) {
+            try {
+                return JSON.stringify(value || {}, null, 2);
+            } catch (error) {
+                return "{}";
+            }
+        }
+
+        function renderCaseTimeline(events) {
+            if (!events.length) {
+                return `<div class="empty-state">No linked token events yet.</div>`;
+            }
+            return `
+                <div class="case-timeline">
+                    ${events.map((event) => `
+                        <div class="case-event ${event.highlight ? "highlight" : ""}">
+                            <div class="case-event-head">
+                                <div>
+                                    <div class="case-event-title">${safeText(event.title || event.kind || "Event")}</div>
+                                    <div class="tiny">${safeText(event.event_time || "-")}</div>
+                                </div>
+                                <div class="chip">${safeText(event.kind || "-")}</div>
+                            </div>
+                            <div class="decision-reason">${safeText(event.summary || "-")}</div>
+                            <div class="case-event-meta">${safeText(event.meta || "")}</div>
+                        </div>
+                    `).join("")}
+                </div>
+            `;
+        }
+
+        function renderDecisionDetail() {
+            const detail = dashboardState.selectedDecisionDetail;
+            const node = document.getElementById("decision-detail");
+            if (!detail) {
+                node.innerHTML = `<div class="empty-state">Select a decision to inspect its replay.</div>`;
+                return;
+            }
+
+            const snapshot = detail.snapshot || {};
+            const related = detail.related || {};
+            const relatedTimeline = related.timeline || [];
+            const currentPosition = related.current_position || null;
+            const kind = String(snapshot.kind || detail.category || "decision").toLowerCase();
+            const sections = [];
+
+            sections.push(renderDetailSection("Token Case Stats", [
+                renderDetailKv("Related Decisions", Number((related.decisions || []).length).toFixed(0)),
+                renderDetailKv("Trade Events", Number((related.trades || []).length).toFixed(0)),
+                renderDetailKv("Signal Events", Number((related.opportunities || []).length).toFixed(0)),
+                renderDetailKv("Open Position", currentPosition ? "active" : "none"),
+            ]));
+
+            if (kind === "entry") {
+                const candidate = snapshot.candidate || {};
+                const wallet = snapshot.wallet || {};
+                sections.push(renderDetailSection("Candidate Snapshot", [
+                    renderDetailKv("Score", Number(candidate.score || detail.context?.score || 0).toFixed(0)),
+                    renderDetailKv("Price", money(candidate.price || 0, 8)),
+                    renderDetailKv("Liquidity", money(candidate.liquidity || detail.context?.liquidity_usd || 0, 0)),
+                    renderDetailKv("Dev Buy", `${Number(candidate.dev_buy || detail.context?.dev_buy_sol || 0).toFixed(2)} SOL`),
+                    renderDetailKv("Holders", Number(candidate.holder_count_estimate || 0).toFixed(0)),
+                    renderDetailKv("Top10", formatPct(candidate.top10_owner_pct || 0)),
+                    renderDetailKv("Top20", formatPct(candidate.top20_owner_pct || 0)),
+                    renderDetailKv("Largest", formatPct(candidate.largest_owner_pct || 0)),
+                    renderDetailKv("Bundle", candidate.bundle_risk_label || candidate.bundle_risk_score || "-"),
+                    renderDetailKv("Narrative", candidate.narrative_label || "-"),
+                    renderDetailKv("Scalp Override", candidate.scalp_override ? "true" : "false"),
+                    renderDetailKv("Progress", candidate.progress || "-"),
+                ]));
+                sections.push(renderDetailSection("Wallet Snapshot", [
+                    renderDetailKv("Current Balance", money(wallet.current_balance || detail.context?.wallet_balance_usd || 0)),
+                    renderDetailKv("Initial Balance", money(wallet.initial_bal || 0)),
+                    renderDetailKv("Buy Count", Number(wallet.buy_count || 0).toFixed(0)),
+                    renderDetailKv("Sell Count", Number(wallet.sell_count || 0).toFixed(0)),
+                ]));
+            } else if (kind === "exit") {
+                const position = snapshot.position || {};
+                const marketSnapshot = snapshot.market_snapshot || {};
+                const decisionSnapshot = snapshot.decision || {};
+                sections.push(renderDetailSection("Position Snapshot", [
+                    renderDetailKv("Buy Price", money(position.buy_price || 0, 8)),
+                    renderDetailKv("Amount USD", money(position.amount_usd || 0)),
+                    renderDetailKv("Mode", position.mode || "-"),
+                    renderDetailKv("Entry Liquidity", money(position.entry_liquidity || 0, 0)),
+                    renderDetailKv("Buy Time", position.buy_time || "-"),
+                    renderDetailKv("Moonbag", Number(position.moonbag_active || 0) ? "true" : "false"),
+                ]));
+                sections.push(renderDetailSection("Market Snapshot", [
+                    renderDetailKv("Market Price", money(marketSnapshot.price || decisionSnapshot.current_price || 0, 8)),
+                    renderDetailKv("Liquidity", money(marketSnapshot.liquidity_usd || 0, 0)),
+                    renderDetailKv("Volume 5m", money(marketSnapshot.volume_5m || 0, 0)),
+                    renderDetailKv("Source", marketSnapshot.source || "-"),
+                    renderDetailKv("Timestamp", marketSnapshot.timestamp || "-"),
+                ]));
+                sections.push(renderDetailSection("Exit Decision", [
+                    renderDetailKv("Exit Reason", decisionSnapshot.exit_reason || detail.reason || "-"),
+                    renderDetailKv("PnL", formatPct(decisionSnapshot.pnl_pct || detail.context?.pnl_pct || 0)),
+                    renderDetailKv("Sell Fraction", `${(Number(decisionSnapshot.sell_fraction || detail.context?.sell_fraction || 0) * 100).toFixed(0)}%`),
+                    renderDetailKv("Sell Amount", money(decisionSnapshot.sell_amount_usd || detail.context?.sell_amount_usd || 0)),
+                    renderDetailKv("Remaining", money(decisionSnapshot.remaining_amount_usd || detail.context?.remaining_amount_usd || 0)),
+                    renderDetailKv("Hold", formatHold(decisionSnapshot.hold_seconds || detail.context?.hold_seconds || 0)),
+                ]));
+            }
+
+            if (currentPosition) {
+                sections.push(renderDetailSection("Current Position", [
+                    renderDetailKv("Buy Price", money(currentPosition.buy_price || 0, 8)),
+                    renderDetailKv("Current Price", money(currentPosition.current_price || 0, 8)),
+                    renderDetailKv("Amount USD", money(currentPosition.amount_usd || 0)),
+                    renderDetailKv("Value USD", money(currentPosition.current_value_usd || 0)),
+                    renderDetailKv("PnL USD", money(currentPosition.unrealized_pnl_usd || 0)),
+                    renderDetailKv("PnL %", formatPct(currentPosition.unrealized_pnl_pct || 0)),
+                ]));
+            }
+
+            sections.push(`
+                <section class="detail-section">
+                    <div class="detail-section-title">Token Case Timeline</div>
+                    ${renderCaseTimeline(relatedTimeline)}
+                </section>
+            `);
+
+            sections.push(`
+                <section class="detail-section">
+                    <div class="detail-section-title">Replay Payload</div>
+                    <pre class="detail-pre">${safeText(prettyJson(snapshot), "{}")}</pre>
+                </section>
+            `);
+
+            node.innerHTML = `
+                <div class="detail-title">${safeText(detail.symbol)} ${outcomeBadge(detail)}</div>
+                <div class="detail-subtitle">${escapeHtml(shortAddr(detail.addr))} | ${safeText(detail.decision_time || "-")} | ${safeText(detail.action || "-")}</div>
+                <div class="detail-stack">
+                    <section class="detail-section">
+                        <div class="detail-section-title">Decision Summary</div>
+                        <div class="decision-reason">${safeText(detail.reason || "No explicit reason")}</div>
+                        <div class="decision-context">${safeText(formatDecisionContext(detail) || "No extra decision context.")}</div>
+                    </section>
+                    ${sections.join("")}
+                </div>
+            `;
+        }
+
+        async function selectDecision(decisionId) {
+            const nextId = Number(decisionId || 0);
+            if (!nextId) {
+                dashboardState.selectedDecisionId = null;
+                dashboardState.selectedDecisionDetail = null;
+                renderDecisionDetail();
+                return;
+            }
+            if (dashboardState.selectedDecisionId === nextId && dashboardState.selectedDecisionDetail?.id === nextId) {
+                return;
+            }
+            dashboardState.selectedDecisionId = nextId;
+            try {
+                dashboardState.selectedDecisionDetail = await fetchJson(`/api/v1/decisions/${nextId}?t=${Date.now()}`);
+            } catch (error) {
+                dashboardState.selectedDecisionDetail = null;
+                console.error(error);
+            }
+            renderDecisionDetail();
+        }
+
+        function currentDecisionQuery() {
+            const filters = dashboardState.decisionFilters;
+            const params = new URLSearchParams();
+            params.set("limit", String(filters.limit));
+            params.set("offset", String(filters.offset));
+            if (filters.category) params.set("category", filters.category);
+            if (filters.outcome) params.set("outcome", filters.outcome);
+            if (filters.search) params.set("search", filters.search);
+            params.set("t", String(Date.now()));
+            return params.toString();
+        }
+
+        function syncDecisionFilterInputs() {
+            document.getElementById("decision-category").value = dashboardState.decisionFilters.category;
+            document.getElementById("decision-outcome").value = dashboardState.decisionFilters.outcome;
+            document.getElementById("decision-search").value = dashboardState.decisionFilters.search;
+        }
+
+        function applyDecisionFilters() {
+            dashboardState.decisionFilters.category = document.getElementById("decision-category").value;
+            dashboardState.decisionFilters.outcome = document.getElementById("decision-outcome").value;
+            dashboardState.decisionFilters.search = document.getElementById("decision-search").value.trim();
+            dashboardState.decisionFilters.offset = 0;
+            update();
+        }
+
+        function resetDecisionFilters() {
+            dashboardState.decisionFilters = {
+                category: "",
+                outcome: "",
+                search: "",
+                limit: dashboardState.decisionFilters.limit,
+                offset: 0,
+            };
+            syncDecisionFilterInputs();
+            update();
+        }
+
+        function moveDecisionPage(direction) {
+            const nextOffset = dashboardState.decisionFilters.offset + (direction * dashboardState.decisionFilters.limit);
+            dashboardState.decisionFilters.offset = Math.max(0, nextOffset);
+            update();
+        }
+
+        function setText(id, value) {
+            const node = document.getElementById(id);
+            if (node) {
+                node.textContent = value;
+            }
+        }
+
+        function renderEmpty(targetId, message) {
+            document.getElementById(targetId).innerHTML = `<div class="empty-state">${message}</div>`;
+        }
+
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            return response.json();
         }
 
         async function update() {
-            const t = Date.now();
+            const timestamp = Date.now();
             try {
-                const [resA, resO, resP, resW, resPerf, resH, resWatch, resNews] = await Promise.all([
-                    fetch('/api/all?limit=200&t='+t).then(r => r.json()),
-                    fetch('/api/opps?t='+t).then(r => r.json()),
-                    fetch('/api/portfolio?t='+t).then(r => r.json()),
-                    fetch('/api/wallet?t='+t).then(r => r.json()),
-                    fetch('/api/performance?t='+t).then(r => r.json()),
-                    fetch('/api/history?t='+t).then(r => r.json()),
-                    fetch('/api/watchlist?t='+t).then(r => r.json()),
-                    fetch('/api/news?t='+t).then(r => r.json())
+                const decisionQuery = currentDecisionQuery();
+                const [
+                    feedRows,
+                    opportunities,
+                    portfolio,
+                    wallet,
+                    performance,
+                    history,
+                    watchlist,
+                    news,
+                    decisions,
+                    status,
+                ] = await Promise.all([
+                    fetchJson(`/api/all?limit=200&t=${timestamp}`),
+                    fetchJson(`/api/opps?t=${timestamp}`),
+                    fetchJson(`/api/portfolio?t=${timestamp}`),
+                    fetchJson(`/api/wallet?t=${timestamp}`),
+                    fetchJson(`/api/performance?t=${timestamp}`),
+                    fetchJson(`/api/history?t=${timestamp}`),
+                    fetchJson(`/api/watchlist?t=${timestamp}`),
+                    fetchJson(`/api/news?t=${timestamp}`),
+                    fetchJson(`/api/v1/decisions?${decisionQuery}`),
+                    fetchJson(`/api/status?t=${timestamp}`),
                 ]);
 
-                document.getElementById('w-bal').innerText = '$' + resW.current_balance.toFixed(2);
-                const pnl = resW.current_balance - resW.initial_bal;
-                document.getElementById('w-pnl').innerText = (pnl>=0?'+':'') + '$' + pnl.toFixed(2);
-                document.getElementById('w-pnl').style.color = pnl>=0?'#7ee787':'#f85149';
-                document.getElementById('w-count').innerText = `${resW.buy_count} / ${resW.sell_count}`;
+                const currentBalance = Number(wallet.current_balance || 0);
+                const initialBalance = Number(wallet.initial_bal || 0);
+                const pnl = currentBalance - initialBalance;
 
-                document.getElementById('list-all').innerHTML = resA.map(i => `
-                    <div class="row" onclick="window.open('https://pump.fun/${i.addr}')" style="cursor:pointer">
-                        <div style="color:var(--dim)">${i.monitor_time || i.scan_time || '-'}</div>
-                        <div style="color:var(--warning)">${i.token_age || i.age || '-'}</div>
-                        <div class="symbol-box"><span class="symbol">${i.symbol}</span><span class="addr">${i.addr.substring(0,4)}...${i.addr.substring(i.addr.length-4)}</span></div>
-                        <div class="val" style="color:var(--highlight)">$${parseFloat(i.price).toFixed(8)}</div>
-                        <div class="val">$${parseFloat(i.liquidity).toLocaleString()}</div>
-                        <div class="val">${Number(i.holder_count_estimate || 0) > 0 ? formatPct(i.top10_owner_pct || 0) : '-'}</div>
-                        <div class="val">${Number(i.holder_count_estimate || 0) > 0 ? Number(i.holder_count_estimate || 0).toFixed(0) : '-'}</div>
-                        <div class="val" style="color:${riskColor(i)}">${i.bundle_risk_label || '待查'}</div>
-                        <div><span class="score-pill">${i.score.toFixed(0)}</span></div>
-                        <div style="text-align:right"><button class="btn btn-internal">PUMP K线</button></div>
-                    </div>
-                `).join('');
+                setText("wallet-balance", money(currentBalance));
+                setText("wallet-count", `${Number(wallet.buy_count || 0)} / ${Number(wallet.sell_count || 0)}`);
+                setText("wallet-balance-note", `Initial ${money(initialBalance)} · exposure ${formatPct(Number(performance.total_profit_pct || 0))}`);
+                setText("wallet-pnl", `${pnl >= 0 ? "+" : ""}${money(pnl)}`);
+                document.getElementById("wallet-pnl").style.color = pnl >= 0 ? "var(--success)" : "var(--danger)";
+                setText("sync-time", new Date().toLocaleTimeString());
+                setText("sync-note", `Service ${status.service} · ${status.version}`);
+                setText("mode-pill", `Mode: ${status.mode}`);
+                setText("service-pill", status.live_enabled ? "Live trading armed" : "Paper trading safe");
 
-                document.getElementById('list-opps').innerHTML = resO.map(i => `
-                    <div style="margin:8px; padding:12px; background:#1c2128; border-radius:6px; border:1px solid #30363d; border-left:4px solid #f1e05a;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span style="font-weight:bold; color:#f0f6fc;">${i.symbol}</span>
-                            <span class="score-pill">${i.score.toFixed(0)}分</span>
+                document.getElementById("list-all").innerHTML = feedRows.length ? feedRows.map((item) => `
+                    <div class="table-row feed-grid">
+                        <div class="tiny">${safeText(item.monitor_time || item.scan_time || "-")}</div>
+                        <div class="tiny">${safeText(item.token_age || item.age || "-")}</div>
+                        <div class="symbol-block">
+                            <span class="symbol">${safeText(item.symbol)}</span>
+                            <span class="tiny mono">${escapeHtml(shortAddr(item.addr))}</span>
                         </div>
-                        <div style="font-size:11px; color:var(--dim); margin-bottom:10px;">${i.reason}</div>
-                        <div style="display:flex; gap:5px;">
-                            <a href="https://pump.fun/${i.addr}" target="_blank" class="btn btn-internal" style="flex:1">去内盘看K线</a>
-                            <a href="https://rugcheck.xyz/tokens/${i.addr}" target="_blank" class="btn" style="background:#30363d; flex:0.5">安全审计</a>
+                        <div class="mono">${money(item.price, 8)}</div>
+                        <div class="mono">${money(item.liquidity, 0)}</div>
+                        <div class="mono">${Number(item.holder_count_estimate || 0) > 0 ? formatPct(item.top10_owner_pct || 0) : "-"}</div>
+                        <div class="mono">${Number(item.holder_count_estimate || 0) > 0 ? Number(item.holder_count_estimate || 0).toFixed(0) : "-"}</div>
+                        <div>${riskBadge(item)}</div>
+                        <div><span class="chip">${Number(item.score || 0).toFixed(0)}</span></div>
+                        <div><a class="button" href="${safeUrl(`https://pump.fun/${item.addr}`)}" target="_blank" rel="noreferrer">Open</a></div>
+                    </div>
+                `).join("") : `<div class="empty-state">No scan rows yet.</div>`;
+
+                document.getElementById("list-opps").innerHTML = opportunities.length ? opportunities.map((item) => `
+                    <div class="signal-card">
+                        <div class="watch-top">
+                            <div>
+                                <div class="symbol">${safeText(item.symbol)}</div>
+                                <div class="tiny mono">${escapeHtml(shortAddr(item.addr))}</div>
+                            </div>
+                            <div class="chip">${Number(item.score || 0).toFixed(0)}</div>
+                        </div>
+                        <div class="decision-reason">${safeText(item.reason)}</div>
+                        <div class="decision-context">Liquidity ${money(item.liq || 0, 0)} | Volume ${money(item.vol || 0, 0)} | Progress ${safeText(item.progress || "-")}</div>
+                        <div class="actions">
+                            <a class="button" href="${safeUrl(`https://pump.fun/${item.addr}`)}" target="_blank" rel="noreferrer">Open Pump</a>
+                            <a class="ghost-button" href="${safeUrl(`https://rugcheck.xyz/tokens/${item.addr}`)}" target="_blank" rel="noreferrer">Rugcheck</a>
                         </div>
                     </div>
-                `).join('');
+                `).join("") : `<div class="empty-state">No current opportunity signals.</div>`;
 
-                document.getElementById('list-news').innerHTML = resNews.length ? resNews.map(i => `
-                    <a href="${i.url || '#'}" target="_blank" style="text-decoration:none; color:inherit">
-                        <div class="news-card" style="border-left:4px solid ${(i.source || '').startsWith('kol:') ? '#58a6ff' : '#30363d'};">
-                            <div class="news-title">${i.title}</div>
-                            <div class="news-meta">${(i.source || '').startsWith('kol:') ? 'KOL ' : ''}${i.source} | ${i.age}前 | ${i.sentiment} | 可信 ${Number(i.confidence || 0).toFixed(2)}</div>
-                            <div class="news-meta">可能带动: ${(i.entities || []).join(', ') || '-'} | 主题: ${(i.topics || []).join(', ') || '-'}</div>
+                document.getElementById("list-news").innerHTML = news.length ? news.map((item) => `
+                    <a href="${safeUrl(item.url)}" target="_blank" rel="noreferrer" style="text-decoration:none; color:inherit;">
+                        <div class="news-card">
+                            <div class="symbol">${safeText(item.title)}</div>
+                            <div class="news-meta">${safeText(item.source)} | ${safeText(item.age || "-")} ago | ${safeText(item.sentiment)} | confidence ${Number(item.confidence || 0).toFixed(2)}</div>
+                            <div class="news-meta">Entities: ${safeText((item.entities || []).join(", ") || "-")} | Topics: ${safeText((item.topics || []).join(", ") || "-")}</div>
                         </div>
                     </a>
-                `).join('') : `<div style="padding:16px; color:var(--dim);">暂无有效新闻事件，策略会继续按市场信号交易</div>`;
+                `).join("") : `<div class="empty-state">No active narrative events right now.</div>`;
 
-                document.getElementById('watch-list').innerHTML = resWatch.length ? resWatch.map(i => `
+                document.getElementById("watch-list").innerHTML = watchlist.length ? watchlist.map((item) => `
                     <div class="watch-card">
                         <div class="watch-top">
                             <div>
-                                <span class="symbol">${i.symbol}</span>
-                                <span class="history-meta"> ${i.watch_age} | 币龄 ${i.token_age} | 刚更新 ${i.last_update_age} | 快照 ${i.last_snapshot_age}</span>
+                                <div class="symbol">${safeText(item.symbol)}</div>
+                                <div class="tiny">${safeText(item.watch_age || "-")} watched · token age ${safeText(item.token_age || "-")} · updated ${safeText(item.last_update_age || "-")}</div>
                             </div>
-                            <div style="text-align:right">
-                                <span class="score-pill">${Number(i.score || 0).toFixed(0)}</span><br>
-                                <span class="source-pill ${(i.last_snapshot_source || '').toLowerCase() === 'pumpportal' ? 'source-live' : 'source-fallback'}">${(i.last_snapshot_source || '-').toUpperCase()}</span>
-                            </div>
+                            <div>${sourceBadge(item.last_snapshot_source || "-")}</div>
                         </div>
                         <div class="watch-grid">
-                            <div class="val">涨幅 ${formatPct(i.price_change_pct)}</div>
-                            <div class="val">回撤 ${formatPct(-Math.abs(i.drawdown_pct || 0))}</div>
-                            <div class="val">流动性 ${Number(i.liquidity_ratio || 0).toFixed(2)}x</div>
-                            <div class="val">Dev ${Number(i.dev_buy || 0).toFixed(2)} SOL</div>
-                            <div class="val">Holders ${Number(i.holder_count_estimate || 0).toFixed(0)}</div>
-                            <div class="val">Top10 ${formatPct(i.top10_owner_pct)}</div>
-                            <div class="val">Top20 ${formatPct(i.top20_owner_pct)}</div>
-                            <div class="val">最大户 ${formatPct(i.largest_owner_pct)}</div>
-                            <div class="val">Bundle ${i.bundle_risk_label || '低'}</div>
-                            <div class="val">进度 ${i.progress || '-'}</div>
-                            <div class="val">现价 $${Number(i.latest_price || 0).toFixed(8)}</div>
-                            <div class="val">质量 ${Number(i.launch_quality_score || 0).toFixed(0)}</div>
+                            <div class="watch-metric">Gain ${formatPct(item.price_change_pct || 0)}</div>
+                            <div class="watch-metric">Drawdown ${formatPct(-Math.abs(item.drawdown_pct || 0))}</div>
+                            <div class="watch-metric">Liquidity ${Number(item.liquidity_ratio || 0).toFixed(2)}x</div>
+                            <div class="watch-metric">Dev ${Number(item.dev_buy || 0).toFixed(2)} SOL</div>
+                            <div class="watch-metric">Holders ${Number(item.holder_count_estimate || 0).toFixed(0)}</div>
+                            <div class="watch-metric">Top10 ${formatPct(item.top10_owner_pct || 0)}</div>
+                            <div class="watch-metric">Top20 ${formatPct(item.top20_owner_pct || 0)}</div>
+                            <div class="watch-metric">Largest ${formatPct(item.largest_owner_pct || 0)}</div>
+                            <div class="watch-metric">Bundle ${safeText(item.bundle_risk_label || "pending")}</div>
                         </div>
-                        <div class="watch-reason">${i.status_reason || ''}<br>信号: ${(i.launch_signals || []).join(', ') || '-'}</div>
-                        <div style="display:flex; gap:5px;">
-                            <a href="${i.dex_url}" target="_blank" class="btn btn-internal" style="flex:1">查看 K 线</a>
+                        <div class="decision-context">${safeText(item.status_reason || "No status reason yet.")}</div>
+                        <div class="decision-context">Signals: ${safeText((item.launch_signals || []).join(", ") || "-")}</div>
+                        <div class="actions">
+                            <a class="button" href="${safeUrl(item.dex_url || `https://pump.fun/${item.addr}`)}" target="_blank" rel="noreferrer">Open Chart</a>
                         </div>
                     </div>
-                `).join('') : `<div style="padding:16px; color:var(--dim);">当前没有观察中的币</div>`;
+                `).join("") : `<div class="empty-state">No active watchlist candidates.</div>`;
 
-                document.getElementById('list-portfolio').innerHTML = resP.map(i => {
-                    const live = (i.price_source || '').toLowerCase() === 'pumpportal';
-                    const sourceClass = live ? 'source-live' : 'source-fallback';
-                    const sourceText = live ? 'LIVE' : (i.price_source || 'fallback');
-                    return `
-                    <div class="p-row">
-                        <div class="symbol">${i.symbol}</div>
-                        <div class="val">${i.buy_time_age}<br><span style="color:var(--dim)">${i.buy_time}</span></div>
-                        <div class="val">$${Number(i.buy_price || 0).toFixed(8)}</div>
-                        <div class="val">${Number(i.quantity_estimate || 0).toFixed(2)}</div>
-                        <div class="val" style="color:var(--highlight)">$${Number(i.current_price || 0).toFixed(8)}</div>
-                        <div><span class="source-pill ${sourceClass}">${sourceText}</span><br><span class="history-meta">${i.price_update_age || '-'}</span></div>
-                        <div class="val">$${Number(i.current_value_usd || 0).toFixed(2)}</div>
-                        <div class="val" style="color:${(i.unrealized_pnl_usd || 0) >= 0 ? '#7ee787' : '#f85149'}">${(i.unrealized_pnl_usd || 0) >= 0 ? '+' : ''}$${Number(i.unrealized_pnl_usd || 0).toFixed(2)}</div>
-                        <div class="val" style="color:${(i.unrealized_pnl_pct || 0) >= 0 ? '#7ee787' : '#f85149'}">${formatPct(i.unrealized_pnl_pct || 0)}</div>
-                        <div class="val">${Number(i.moonbag_active || 0) ? '已留' : '-'}<br><span style="color:var(--dim)">锁 $${Number(i.profit_locked_usd || 0).toFixed(2)}</span></div>
-                        <div style="text-align:right"><a href="https://pump.fun/${i.addr}" target="_blank" class="btn btn-internal">查看实盘</a></div>
+                document.getElementById("list-portfolio").innerHTML = portfolio.length ? portfolio.map((item) => `
+                    <div class="table-row position-grid">
+                        <div class="symbol-block">
+                            <span class="symbol">${safeText(item.symbol)}</span>
+                            <span class="tiny mono">${escapeHtml(shortAddr(item.addr))}</span>
+                        </div>
+                        <div class="tiny">${safeText(item.buy_time_age || "-")}<br>${safeText(item.buy_time || "-")}</div>
+                        <div class="mono">${money(item.buy_price || 0, 8)}</div>
+                        <div class="mono">${Number(item.quantity_estimate || 0).toFixed(2)}</div>
+                        <div class="mono">${money(item.current_price || 0, 8)}</div>
+                        <div>${sourceBadge(item.price_source || "unknown")}</div>
+                        <div class="mono">${money(item.current_value_usd || 0)}</div>
+                        <div class="mono" style="color:${Number(item.unrealized_pnl_usd || 0) >= 0 ? "var(--success)" : "var(--danger)"}">${Number(item.unrealized_pnl_usd || 0) >= 0 ? "+" : ""}${money(item.unrealized_pnl_usd || 0)}</div>
+                        <div class="mono" style="color:${Number(item.unrealized_pnl_pct || 0) >= 0 ? "var(--success)" : "var(--danger)"}">${formatPct(item.unrealized_pnl_pct || 0)}</div>
+                        <div class="tiny">${Number(item.moonbag_active || 0) ? "Active" : "-"}<br>locked ${money(item.profit_locked_usd || 0)}</div>
+                        <div><a class="button" href="${safeUrl(`https://pump.fun/${item.addr}`)}" target="_blank" rel="noreferrer">Open</a></div>
                     </div>
-                `}).join('');
+                `).join("") : `<div class="empty-state">No open positions right now.</div>`;
 
-                renderMetricGrid('performance-realized', [
-                    ['已实现利润', `${resPerf.realized_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.realized_profit_usd || 0).toFixed(2)}`],
-                    ['已实现收益率', formatPct(resPerf.realized_profit_pct)],
-                    ['现金余额', `$${Number(resPerf.cash_balance_usd || 0).toFixed(2)}`],
-                    ['已平仓', Number(resPerf.closed_trades || 0)],
-                    ['胜率', formatPct(resPerf.win_rate)],
-                    ['主要出场', resPerf.best_exit_reason || '-']
+                renderMetricGrid("performance-realized", [
+                    ["Realized PnL", `${Number(performance.realized_profit_usd || 0) >= 0 ? "+" : ""}${money(performance.realized_profit_usd || 0)}`],
+                    ["Realized %", formatPct(performance.realized_profit_pct || 0)],
+                    ["Cash", money(performance.cash_balance_usd || 0)],
+                    ["Closed Trades", Number(performance.closed_trades || 0)],
+                    ["Win Rate", formatPct(performance.win_rate || 0)],
+                    ["Top Exit", performance.best_exit_reason || "-"],
                 ]);
 
-                renderMetricGrid('performance-floating', [
-                    ['浮动利润', `${resPerf.unrealized_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.unrealized_profit_usd || 0).toFixed(2)}`],
-                    ['浮动收益率', formatPct(resPerf.unrealized_profit_pct)],
-                    ['持仓成本', `$${Number(resPerf.unrealized_cost_usd || 0).toFixed(2)}`],
-                    ['持仓市值', `$${Number(resPerf.unrealized_value_usd || 0).toFixed(2)}`],
-                    ['总权益', `$${Number(resPerf.total_equity_usd || 0).toFixed(2)}`],
-                    ['总收益率', formatPct(resPerf.total_profit_pct)]
+                renderMetricGrid("performance-floating", [
+                    ["Floating PnL", `${Number(performance.unrealized_profit_usd || 0) >= 0 ? "+" : ""}${money(performance.unrealized_profit_usd || 0)}`],
+                    ["Floating %", formatPct(performance.unrealized_profit_pct || 0)],
+                    ["Cost Basis", money(performance.unrealized_cost_usd || 0)],
+                    ["Open Value", money(performance.unrealized_value_usd || 0)],
+                    ["Total Equity", money(performance.total_equity_usd || 0)],
+                    ["Total Return", formatPct(performance.total_profit_pct || 0)],
                 ]);
 
-                renderMetricGrid('performance-quality', [
-                    ['总利润', `${resPerf.net_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.net_profit_usd || 0).toFixed(2)}`],
-                    ['平均单笔', formatPct(resPerf.avg_trade_pct)],
-                    ['胜率', formatPct(resPerf.win_rate)],
-                    ['最佳单笔', formatPct(resPerf.best_trade_pct)],
-                    ['最差单笔', formatPct(resPerf.worst_trade_pct)],
-                    ['利润因子', Number(resPerf.profit_factor || 0).toFixed(2)],
-                    ['最大回撤', formatPct(resPerf.max_drawdown_pct)],
-                    ['平均持仓', formatHold(resPerf.avg_hold_seconds)],
-                    ['未平仓', Number(resPerf.open_positions || 0)]
+                renderMetricGrid("performance-quality", [
+                    ["Net PnL", `${Number(performance.net_profit_usd || 0) >= 0 ? "+" : ""}${money(performance.net_profit_usd || 0)}`],
+                    ["Avg Trade", formatPct(performance.avg_trade_pct || 0)],
+                    ["Win Rate", formatPct(performance.win_rate || 0)],
+                    ["Best Trade", formatPct(performance.best_trade_pct || 0)],
+                    ["Worst Trade", formatPct(performance.worst_trade_pct || 0)],
+                    ["Profit Factor", Number(performance.profit_factor || 0).toFixed(2)],
+                    ["Max Drawdown", formatPct(performance.max_drawdown_pct || 0)],
+                    ["Avg Hold", formatHold(performance.avg_hold_seconds || 0)],
+                    ["Open Positions", Number(performance.open_positions || 0)],
                 ]);
 
-                document.getElementById('history-list').innerHTML = resH.map(i => `
-                    <div class="history-row">
+                document.getElementById("history-list").innerHTML = history.length ? history.map((item) => `
+                    <div class="history-card">
                         <div class="history-head">
                             <div>
-                                <span class="symbol">${i.symbol}</span>
-                                <span class="history-meta"> ${i.side.toUpperCase()} ${i.time}</span>
+                                <div class="symbol">${safeText(item.symbol)}</div>
+                                <div class="tiny">${safeText(String(item.side || "").toUpperCase())} · ${safeText(item.time || "-")}</div>
                             </div>
-                            <div class="val" style="color:${i.pnl_pct > 0 ? '#7ee787' : (i.pnl_pct < 0 ? '#f85149' : 'var(--dim)')}">
-                                ${i.pnl_pct === null || i.pnl_pct === undefined ? '-' : formatPct(i.pnl_pct)}
+                            <div class="mono" style="color:${item.pnl_pct > 0 ? "var(--success)" : (item.pnl_pct < 0 ? "var(--danger)" : "var(--muted)")}">
+                                ${item.pnl_pct === null || item.pnl_pct === undefined ? "-" : formatPct(item.pnl_pct)}
                             </div>
                         </div>
-                        <div class="history-meta">金额: $${Number(i.amount_usd || 0).toFixed(2)} | 价格: $${Number(i.price || 0).toFixed(8)}</div>
-                        <div class="history-reason">${(i.metrics && (i.metrics.entry_reason || i.metrics.exit_reason)) ? (i.metrics.entry_reason || i.metrics.exit_reason) : '无结构化原因'}</div>
+                        <div class="history-context">Amount ${money(item.amount_usd || 0)} | Price ${money(item.price || 0, 8)}</div>
+                        <div class="decision-reason">${safeText((item.metrics && (item.metrics.entry_reason || item.metrics.exit_reason)) ? (item.metrics.entry_reason || item.metrics.exit_reason) : "No structured reason attached.")}</div>
                     </div>
-                `).join('');
+                `).join("") : `<div class="empty-state">No trade history yet.</div>`;
 
-                document.getElementById('sync-info').innerText = "LATEST SYNC: " + new Date().toLocaleTimeString();
-            } catch(e) {}
+                const decisionItems = decisions.items || [];
+                const pagination = decisions.pagination || {};
+                const appliedFilters = decisions.filters || {};
+                const decisionIds = new Set(decisionItems.map((item) => Number(item.id || 0)));
+                if (!decisionItems.length) {
+                    dashboardState.selectedDecisionId = null;
+                    dashboardState.selectedDecisionDetail = null;
+                    renderDecisionDetail();
+                } else if (!dashboardState.selectedDecisionId || !decisionIds.has(Number(dashboardState.selectedDecisionId))) {
+                    await selectDecision(decisionItems[0].id);
+                } else if (!dashboardState.selectedDecisionDetail || Number(dashboardState.selectedDecisionDetail.id || 0) !== Number(dashboardState.selectedDecisionId)) {
+                    await selectDecision(dashboardState.selectedDecisionId);
+                }
+                document.getElementById("decision-list").innerHTML = decisionItems.length ? decisionItems.map((item) => `
+                    <div class="decision-card ${Number(item.id || 0) === Number(dashboardState.selectedDecisionId || 0) ? "active" : ""}" onclick="selectDecision(${Number(item.id || 0)})">
+                        <div class="decision-head">
+                            <div>
+                                <div class="outcome-line">
+                                    <span class="symbol">${safeText(item.symbol)}</span>
+                                    ${outcomeBadge(item)}
+                                </div>
+                                <div class="tiny mono">${escapeHtml(shortAddr(item.addr))} · ${safeText(item.decision_time || "-")}</div>
+                            </div>
+                            <div class="chip">${safeText(item.action || "-")}</div>
+                        </div>
+                        <div class="decision-reason">${safeText(item.reason || "No explicit reason")}</div>
+                        <div class="decision-context">${safeText(formatDecisionContext(item) || "No extra decision context.")}</div>
+                    </div>
+                `).join("") : `<div class="empty-state">No decisions matched the current filters.</div>`;
+
+                const total = Number(pagination.total || 0);
+                const offset = Number(pagination.offset || 0);
+                const returned = Number(pagination.returned || decisionItems.length || 0);
+                const page = total > 0 ? Math.floor(offset / Number(pagination.limit || 1)) + 1 : 1;
+                const totalPages = total > 0 ? Math.ceil(total / Number(pagination.limit || 1)) : 1;
+                setText("decision-summary", `${returned} shown · ${total} total decisions`);
+                setText(
+                    "decision-filter-note",
+                    [
+                        appliedFilters.category ? `category ${appliedFilters.category}` : null,
+                        appliedFilters.outcome ? `outcome ${appliedFilters.outcome}` : null,
+                        appliedFilters.search ? `search "${appliedFilters.search}"` : null,
+                    ].filter(Boolean).join(" · ") || "No filter applied",
+                );
+                setText("decision-page-info", `Page ${page} / ${totalPages}`);
+                document.getElementById("decision-prev").disabled = pagination.prev_offset === null;
+                document.getElementById("decision-next").disabled = !pagination.has_more;
+
+                syncDecisionFilterInputs();
+            } catch (error) {
+                setText("sync-note", "Update failed");
+                console.error(error);
+            }
         }
+
         setInterval(update, 2000);
+        syncDecisionFilterInputs();
         update();
     </script>
 </body>

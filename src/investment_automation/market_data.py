@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextlib import suppress
 from typing import Any, Dict, Optional, Set, Tuple
 
 import requests
@@ -25,6 +26,31 @@ class MarketDataClient:
         self._active_token_subscriptions: Set[str] = set()
         self._trade_cache: Dict[str, Dict[str, Any]] = {}
         self._metadata_cache: Dict[str, Dict[str, Any]] = {}
+
+    async def aclose(self) -> None:
+        stream_task = self._stream_task
+        self._stream_task = None
+        if stream_task and not stream_task.done():
+            stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stream_task
+        ws = self._ws
+        self._ws = None
+        if ws is not None:
+            with suppress(Exception):
+                await ws.close()
+        self.session.close()
+
+    def runtime_status(self) -> dict[str, Any]:
+        return {
+            "stream_connected": self._ws is not None,
+            "stream_task_running": bool(self._stream_task and not self._stream_task.done()),
+            "desired_token_subscriptions": len(self._desired_token_subscriptions),
+            "active_token_subscriptions": len(self._active_token_subscriptions),
+            "cached_trade_snapshots": len(self._trade_cache),
+            "cached_token_metadata": len(self._metadata_cache),
+            "cached_holder_metrics": len(self._holder_cache),
+        }
 
     async def subscribe_new_tokens(self):
         await self.ensure_realtime_stream()
@@ -335,23 +361,29 @@ class MarketDataClient:
         }
 
     async def _run_stream(self) -> None:
-        while True:
-            try:
-                async with websockets.connect(self.settings.pumpportal_ws_url, ping_interval=20, ping_timeout=20) as ws:
-                    self._ws = ws
+        try:
+            while True:
+                try:
+                    async with websockets.connect(self.settings.pumpportal_ws_url, ping_interval=20, ping_timeout=20) as ws:
+                        self._ws = ws
+                        self._active_token_subscriptions = set()
+                        await self._send_json({"method": "subscribeNewToken"})
+                        await self._sync_token_subscriptions()
+                        async for raw in ws:
+                            try:
+                                payload = json.loads(raw)
+                            except json.JSONDecodeError:
+                                continue
+                            self._handle_stream_payload(payload)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self._ws = None
                     self._active_token_subscriptions = set()
-                    await self._send_json({"method": "subscribeNewToken"})
-                    await self._sync_token_subscriptions()
-                    async for raw in ws:
-                        try:
-                            payload = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-                        self._handle_stream_payload(payload)
-            except Exception:
-                self._ws = None
-                self._active_token_subscriptions = set()
-                await asyncio.sleep(self.settings.monitor_poll_seconds)
+                    await asyncio.sleep(self.settings.monitor_poll_seconds)
+        finally:
+            self._ws = None
+            self._active_token_subscriptions = set()
 
     async def _sync_token_subscriptions(self) -> None:
         ws = self._ws

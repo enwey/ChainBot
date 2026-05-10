@@ -49,3 +49,7 @@ The web UI will be available at `http://127.0.0.1:8000`.
 ## Important note
 
 Live trading always carries financial risk. This project now defaults to paper execution and requires explicit opt-in before it will submit a real swap.
+
+## Productization roadmap
+
+For a more mature service architecture and delivery plan, see [docs/productization-roadmap.md](docs/productization-roadmap.md).

@@ -81,6 +81,9 @@ class NewsClient:
         self.session.headers.update({"User-Agent": "investment-automation-news/0.1"})
         self.kol_profiles = self._parse_kol_profiles()
 
+    def close(self) -> None:
+        self.session.close()
+
     def fetch_events(self) -> list[NewsEvent]:
         events: list[NewsEvent] = []
         for feed_url in self.settings.news_feeds:

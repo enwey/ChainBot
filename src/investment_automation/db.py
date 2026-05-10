@@ -147,6 +147,24 @@ class Database:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS decision_audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    decision_ts INTEGER NOT NULL DEFAULT 0,
+                    decision_time TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    outcome TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    addr TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    context_json TEXT NOT NULL DEFAULT '{}',
+                    snapshot_json TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            self._ensure_column(conn, "decision_audit", "snapshot_json", "TEXT NOT NULL DEFAULT '{}'")
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS strategy_state (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     mode TEXT NOT NULL,
@@ -197,6 +215,63 @@ class Database:
                 conn.commit()
             finally:
                 conn.close()
+
+    def _delete_rows(self, conn: sqlite3.Connection, statement: str, params: tuple[Any, ...]) -> int:
+        before = conn.total_changes
+        conn.execute(statement, params)
+        return conn.total_changes - before
+
+    def delete_scan_logs_older_than(self, cutoff_ts: int, cutoff_time: str) -> int:
+        with self.connection() as conn:
+            return self._delete_rows(
+                conn,
+                """
+                DELETE FROM scan_logs
+                WHERE (
+                    COALESCE(NULLIF(first_seen_ts, 0), NULLIF(created_ts, 0)) IS NOT NULL
+                    AND COALESCE(NULLIF(first_seen_ts, 0), NULLIF(created_ts, 0)) < ?
+                )
+                OR (
+                    COALESCE(NULLIF(first_seen_ts, 0), NULLIF(created_ts, 0)) IS NULL
+                    AND scan_time < ?
+                )
+                """,
+                (cutoff_ts, cutoff_time),
+            )
+
+    def delete_opportunities_older_than(self, cutoff_time: str) -> int:
+        with self.connection() as conn:
+            return self._delete_rows(
+                conn,
+                "DELETE FROM opportunities WHERE scan_time < ?",
+                (cutoff_time,),
+            )
+
+    def delete_news_events_older_than(self, cutoff_ts: int) -> int:
+        with self.connection() as conn:
+            return self._delete_rows(
+                conn,
+                "DELETE FROM news_events WHERE active_until_ts < ?",
+                (cutoff_ts,),
+            )
+
+    def delete_decision_audit_older_than(self, cutoff_ts: int, cutoff_time: str) -> int:
+        with self.connection() as conn:
+            return self._delete_rows(
+                conn,
+                """
+                DELETE FROM decision_audit
+                WHERE (
+                    COALESCE(NULLIF(decision_ts, 0), 0) > 0
+                    AND decision_ts < ?
+                )
+                OR (
+                    COALESCE(NULLIF(decision_ts, 0), 0) = 0
+                    AND decision_time < ?
+                )
+                """,
+                (cutoff_ts, cutoff_time),
+            )
 
     def record_scan(self, payload: dict[str, Any]) -> None:
         with self.connection() as conn:
@@ -327,6 +402,28 @@ class Database:
                     ),
                 )
             return conn.total_changes - before
+
+    def record_decision_audit(self, payload: dict[str, Any]) -> None:
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO decision_audit
+                (decision_ts, decision_time, category, action, outcome, symbol, addr, reason, context_json, snapshot_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(payload.get("decision_ts") or 0),
+                    str(payload.get("decision_time") or ""),
+                    str(payload.get("category") or ""),
+                    str(payload.get("action") or ""),
+                    str(payload.get("outcome") or ""),
+                    str(payload.get("symbol") or ""),
+                    str(payload.get("addr") or ""),
+                    str(payload.get("reason") or ""),
+                    json.dumps(payload.get("context") or {}),
+                    json.dumps(payload.get("snapshot") or {}),
+                ),
+            )
 
     def get_news_events(self, limit: int = 30, active_only: bool = False) -> list[dict[str, Any]]:
         now = int(time.time())
@@ -568,6 +665,21 @@ class Database:
             keys = ["type", "symbol", "score", "reason", "addr", "liq", "vol", "dex_url", "scan_time", "socials", "progress"]
             return [dict(zip(keys, row)) for row in rows]
 
+    def get_opportunities_for_addr(self, addr: str, limit: int = 12) -> list[dict[str, Any]]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT type, symbol, score, reason, addr, liq, vol, dex_url, scan_time, socials, progress
+                FROM opportunities
+                WHERE addr = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (addr, limit),
+            ).fetchall()
+            keys = ["type", "symbol", "score", "reason", "addr", "liq", "vol", "dex_url", "scan_time", "socials", "progress"]
+            return [dict(zip(keys, row)) for row in rows]
+
     def get_portfolio(self) -> list[dict[str, Any]]:
         with self.connection() as conn:
             rows = conn.execute(
@@ -596,6 +708,9 @@ class Database:
                 item["price_update_age"] = self._format_duration(max(int(now) - int(item.get("price_updated_ts") or 0), 0)) if int(item.get("price_updated_ts") or 0) > 0 else "-"
             return items
 
+    def get_portfolio_position(self, addr: str) -> Optional[dict[str, Any]]:
+        return next((item for item in self.get_portfolio() if item.get("addr") == addr), None)
+
     def _age_from_time_string(self, value: Any, now_ts: float) -> str:
         try:
             parsed = time.strptime(str(value), "%Y-%m-%d %H:%M:%S")
@@ -613,15 +728,165 @@ class Database:
                 """,
                 (limit,),
             ).fetchall()
-            keys = ["id", "addr", "symbol", "side", "price", "amount_usd", "pnl_pct", "tx_hash", "metrics_json", "time"]
-            items = [dict(zip(keys, row)) for row in rows]
-            for item in items:
-                raw_metrics = item.get("metrics_json") or "{}"
-                try:
-                    item["metrics"] = json.loads(raw_metrics)
-                except json.JSONDecodeError:
-                    item["metrics"] = {}
-            return items
+            return self._hydrate_trade_history_rows(rows)
+
+    def get_trade_history_for_addr(self, addr: str, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, addr, symbol, side, price, amount_usd, pnl_pct, tx_hash, metrics_json, time
+                FROM trade_history
+                WHERE addr = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (addr, limit),
+            ).fetchall()
+            return self._hydrate_trade_history_rows(rows)
+
+    def get_decision_audit(
+        self,
+        limit: int = 100,
+        *,
+        offset: int = 0,
+        category: Optional[str] = None,
+        action: Optional[str] = None,
+        outcome: Optional[str] = None,
+        symbol: Optional[str] = None,
+        addr: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        rows, _ = self.query_decision_audit(
+            limit=limit,
+            offset=offset,
+            category=category,
+            action=action,
+            outcome=outcome,
+            symbol=symbol,
+            addr=addr,
+            search=search,
+        )
+        return rows
+
+    def query_decision_audit(
+        self,
+        limit: int = 100,
+        *,
+        offset: int = 0,
+        category: Optional[str] = None,
+        action: Optional[str] = None,
+        outcome: Optional[str] = None,
+        symbol: Optional[str] = None,
+        addr: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        filters, params = self._decision_audit_filters(
+            category=category,
+            action=action,
+            outcome=outcome,
+            symbol=symbol,
+            addr=addr,
+            search=search,
+        )
+        where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
+        with self.connection() as conn:
+            total = int(
+                conn.execute(
+                    f"SELECT COUNT(*) FROM decision_audit {where_sql}",
+                    params,
+                ).fetchone()[0]
+            )
+            rows = conn.execute(
+                f"""
+                SELECT id, decision_ts, decision_time, category, action, outcome, symbol, addr, reason, context_json, snapshot_json
+                FROM decision_audit
+                {where_sql}
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, limit, offset),
+            ).fetchall()
+        return self._hydrate_decision_audit_rows(rows), total
+
+    def get_decision_audit_by_id(self, decision_id: int) -> Optional[dict[str, Any]]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id, decision_ts, decision_time, category, action, outcome, symbol, addr, reason, context_json, snapshot_json
+                FROM decision_audit
+                WHERE id = ?
+                """,
+                (decision_id,),
+            ).fetchone()
+        if not row:
+            return None
+        items = self._hydrate_decision_audit_rows([row])
+        return items[0] if items else None
+
+    def get_decision_audit_for_addr(self, addr: str, limit: int = 20) -> list[dict[str, Any]]:
+        rows, _ = self.query_decision_audit(limit=limit, addr=addr)
+        return rows
+
+    def _decision_audit_filters(
+        self,
+        *,
+        category: Optional[str] = None,
+        action: Optional[str] = None,
+        outcome: Optional[str] = None,
+        symbol: Optional[str] = None,
+        addr: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> tuple[list[str], list[Any]]:
+        filters: list[str] = []
+        params: list[Any] = []
+        if category:
+            filters.append("category = ?")
+            params.append(category)
+        if action:
+            filters.append("action = ?")
+            params.append(action)
+        if outcome:
+            filters.append("outcome = ?")
+            params.append(outcome)
+        if symbol:
+            filters.append("UPPER(symbol) = UPPER(?)")
+            params.append(symbol)
+        if addr:
+            filters.append("addr = ?")
+            params.append(addr)
+        if search:
+            like_value = f"%{search.lower()}%"
+            filters.append("(LOWER(symbol) LIKE ? OR LOWER(addr) LIKE ? OR LOWER(reason) LIKE ?)")
+            params.extend([like_value, like_value, like_value])
+        return filters, params
+
+    def _hydrate_decision_audit_rows(self, rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            raw_context = item.pop("context_json", "{}") or "{}"
+            try:
+                item["context"] = json.loads(raw_context)
+            except json.JSONDecodeError:
+                item["context"] = {}
+            raw_snapshot = item.pop("snapshot_json", "{}") or "{}"
+            try:
+                item["snapshot"] = json.loads(raw_snapshot)
+            except json.JSONDecodeError:
+                item["snapshot"] = {}
+            items.append(item)
+        return items
+
+    def _hydrate_trade_history_rows(self, rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
+        keys = ["id", "addr", "symbol", "side", "price", "amount_usd", "pnl_pct", "tx_hash", "metrics_json", "time"]
+        items = [dict(zip(keys, row)) for row in rows]
+        for item in items:
+            raw_metrics = item.get("metrics_json") or "{}"
+            try:
+                item["metrics"] = json.loads(raw_metrics)
+            except json.JSONDecodeError:
+                item["metrics"] = {}
+        return items
 
     def recent_sell_trades(self, limit: int = 40) -> list[dict[str, Any]]:
         return [row for row in self.get_trade_history(limit=limit * 3) if row.get("side") == "sell" and row.get("pnl_pct") is not None][:limit]
@@ -639,7 +904,9 @@ class Database:
         item["instant_probe_enabled"] = bool(item.get("instant_probe_enabled"))
         return item
 
-    def save_strategy_state(self, state: dict[str, Any]) -> None:
+    def save_strategy_state(self, state: Any) -> None:
+        if hasattr(state, "to_dict"):
+            state = state.to_dict()
         with self.connection() as conn:
             conn.execute(
                 """

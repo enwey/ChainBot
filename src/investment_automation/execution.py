@@ -28,6 +28,17 @@ class TradeExecutor:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "investment-automation/0.1"})
 
+    def close(self) -> None:
+        self.session.close()
+
+    def runtime_status(self) -> dict[str, object]:
+        return {
+            "execution_mode": self.settings.execution_mode,
+            "live_enabled": self.settings.is_live_mode,
+            "buy_slippage_bps": self.settings.buy_slippage_bps,
+            "sell_slippage_bps": self.settings.sell_slippage_bps,
+        }
+
     def buy(self, token_mint: str, amount_usd: float) -> ExecutionResult:
         return self._execute("buy", token_mint, amount_usd)
 
