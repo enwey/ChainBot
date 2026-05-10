@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>Solana Trinity Sniper HQ - Internal Focus v8.1</title>
+    <style>
+        :root { --bg: #0d1117; --card: #161b22; --text: #c9d1d9; --accent: #238636; --highlight: #58a6ff; --dim: #8b949e; --danger: #f85149; --warning: #f1e05a; }
+        html, body { height: 100%; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; overflow: hidden; box-sizing: border-box; }
+        .header { height: 50px; background: #1c2128; border-bottom: 2px solid var(--accent); padding: 0 20px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; }
+        .wallet-bar { display: flex; gap: 20px; align-items: center; }
+        .w-item { display: flex; flex-direction: column; }
+        .w-label { font-size: 9px; color: var(--dim); text-transform: uppercase; }
+        .w-val { font-size: 16px; font-weight: bold; font-family: monospace; }
+        .tabs { display: flex; gap: 5px; margin-top: 10px; }
+        .tab { padding: 6px 15px; background: #161b22; border-radius: 5px 5px 0 0; cursor: pointer; border: 1px solid #30363d; font-size: 12px; font-weight: bold; color: var(--dim); }
+        .tab.active { background: #30363d; color: white; border-bottom: 2px solid var(--highlight); }
+        .panel { display: none; height: calc(100vh - 145px); border-radius: 0 0 8px 8px; overflow: hidden; min-height: 0; }
+        .panel.active { display: block; }
+        .grid-main { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 12px; height: 100%; min-height: 0; }
+        .side-stack { display: grid; grid-template-rows: 1fr 0.8fr 0.8fr; gap: 12px; height: 100%; min-height: 0; }
+        .grid-analytics { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 12px; height: 100%; min-height: 0; }
+        .analytics-stack { display: grid; grid-template-rows: auto auto 1fr; gap: 12px; padding: 12px; overflow-y: auto; }
+        .column { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+        .col-header { padding: 8px 15px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 13px; font-weight: bold; }
+        .list-box { flex: 1; min-height: 0; overflow-y: auto; padding: 5px; overscroll-behavior: contain; }
+        .list-box::-webkit-scrollbar { width: 9px; height: 9px; }
+        .list-box::-webkit-scrollbar-thumb { background: #30363d; border-radius: 999px; }
+        .list-box::-webkit-scrollbar-thumb:hover { background: #58a6ff66; }
+        .row { display: grid; grid-template-columns: 70px 60px 120px 85px 75px 70px 70px 55px 45px 1fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #21262d; align-items: center; font-size: 11px; }
+        .row:hover { background: #1c2128; }
+        .symbol-box { display: flex; flex-direction: column; }
+        .symbol { font-weight: bold; color: #f0f6fc; font-size: 12px; }
+        .addr { font-family: monospace; font-size: 9px; color: var(--dim); cursor: pointer; }
+        .val { font-family: 'JetBrains Mono', monospace; }
+        .score-pill { padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: bold; background: #23863622; color: #7ee787; border: 1px solid #238636; }
+        .btn { text-decoration: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; border: none; cursor: pointer; text-align: center; }
+        .btn-internal { background: #e028f0; } /* Pump.fun 标志紫色 */
+        .p-row { display: grid; grid-template-columns: 90px 90px 110px 85px 110px 75px 80px 90px 90px 80px 1fr; gap: 8px; padding: 12px 18px; border-bottom: 1px solid #21262d; align-items: center; font-size: 12px; }
+        .source-pill { display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: bold; border: 1px solid #30363d; color: var(--dim); }
+        .source-live { color: #7ee787; border-color: #238636; background: #23863622; }
+        .source-fallback { color: var(--warning); border-color: #9e6a03; background: #f1e05a22; }
+        .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; }
+        .metric-card { background: #11161c; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }
+        .metric-label { font-size: 10px; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+        .metric-value { font-size: 22px; font-weight: bold; font-family: monospace; }
+        .metric-section { border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+        .metric-section-title { padding: 8px 12px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 12px; font-weight: bold; }
+        .history-row { padding: 12px; border-bottom: 1px solid #21262d; }
+        .history-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+        .history-meta { font-size: 11px; color: var(--dim); }
+        .history-reason { font-size: 11px; color: var(--text); }
+        .watch-card { margin: 8px; padding: 12px; background: #1c2128; border-radius: 8px; border: 1px solid #30363d; }
+        .watch-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+        .watch-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; font-size: 11px; margin-bottom: 8px; }
+        .watch-reason { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+        .news-card { margin: 8px; padding: 10px; background: #11161c; border-radius: 8px; border: 1px solid #30363d; }
+        .news-title { font-size: 11px; font-weight: bold; color: #f0f6fc; margin-bottom: 6px; line-height: 1.35; }
+        .news-meta { font-size: 10px; color: var(--dim); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="wallet-bar">
+            <div class="w-item"><span class="w-label">初始本金</span><span class="w-val">$200.00</span></div>
+            <div class="w-item"><span class="w-label">当前余额</span><span class="w-val" id="w-bal" style="color:var(--highlight)">$0.00</span></div>
+            <div class="w-item"><span class="w-label">今日盈亏</span><span class="w-val" id="w-pnl">$0.00</span></div>
+            <div class="w-item"><span class="w-label">模拟成交</span><span class="w-val" id="w-count">0/0</span></div>
+        </div>
+        <div id="sync-info" style="font-size:10px; color:var(--dim)">Connecting...</div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('radar', event)">📡 实时内盘雷达</div>
+        <div class="tab" onclick="switchTab('portfolio', event)">💼 模拟持仓/逃生舱</div>
+        <div class="tab" onclick="switchTab('analytics', event)">📈 策略分析</div>
+    </div>
+
+    <div id="panel-radar" class="panel active">
+        <div class="grid-main">
+            <div class="column">
+                <div class="col-header">📡 内盘实时流 <small style="color:var(--dim); font-weight:normal;">(点击行直跳 Pump.fun K线)</small></div>
+                <div class="row" style="background:#161b22; color:var(--dim); font-weight:bold; height:20px; padding:5px 12px;">
+                    <div>监控时间</div><div>币龄</div><div>代币/地址</div><div>价格</div><div>流动性</div><div>Top10</div><div>Holders</div><div>风险</div><div>得分</div><div style="text-align:right">操作</div>
+                </div>
+                <div id="list-all" class="list-box"></div>
+            </div>
+            <div class="side-stack">
+                <div class="column" style="border-top: 3px solid var(--highlight);">
+                    <div class="col-header" style="color:var(--highlight);">👀 观察池状态</div>
+                    <div id="watch-list" class="list-box"></div>
+                </div>
+                <div class="column" style="border-top: 3px solid #ff7b72;">
+                    <div class="col-header" style="color:#ff7b72;">📰 新闻事件雷达</div>
+                    <div id="list-news" class="list-box"></div>
+                </div>
+                <div class="column" style="border-top: 3px solid var(--warning);">
+                    <div class="col-header" style="color:var(--warning);">🔥 策略信号流</div>
+                    <div id="list-opps" class="list-box"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-portfolio" class="panel column">
+        <div class="col-header" style="color:var(--danger)">🚨 持仓自动管理</div>
+        <div class="p-row" style="background:#161b22; color:var(--dim); font-weight:bold; padding:8px 18px;">
+            <div>代币</div>
+            <div>买入时间</div>
+            <div>买入价格</div>
+            <div>买入数量</div>
+            <div>当前价格</div>
+            <div>行情源</div>
+            <div>当前价值</div>
+            <div>浮盈金额</div>
+            <div>浮盈幅度</div>
+            <div>底仓</div>
+            <div style="text-align:right">操作</div>
+        </div>
+        <div id="list-portfolio" class="list-box"></div>
+    </div>
+
+    <div id="panel-analytics" class="panel">
+        <div class="grid-analytics">
+            <div class="column">
+                <div class="col-header">📈 策略表现</div>
+                <div class="analytics-stack">
+                    <div class="metric-section">
+                        <div class="metric-section-title">已实现收益</div>
+                        <div id="performance-realized" class="metric-grid"></div>
+                    </div>
+                    <div class="metric-section">
+                        <div class="metric-section-title">当前浮动收益</div>
+                        <div id="performance-floating" class="metric-grid"></div>
+                    </div>
+                    <div class="metric-section">
+                        <div class="metric-section-title">策略质量</div>
+                        <div id="performance-quality" class="metric-grid"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="col-header">🧾 最近交易与原因</div>
+                <div id="history-list" class="list-box"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(name, e) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('panel-' + name).classList.add('active');
+            if(e) e.target.classList.add('active');
+        }
+
+        function formatPct(value) {
+            const num = Number(value || 0);
+            return `${num >= 0 ? '+' : ''}${(num * 100).toFixed(1)}%`;
+        }
+
+        function riskColor(item) {
+            if ((item.bundle_risk_label || '') === '待查') return 'var(--dim)';
+            return (item.bundle_risk_score || 0) >= 0.75 ? '#f85149' : ((item.bundle_risk_score || 0) >= 0.45 ? '#f1e05a' : '#7ee787');
+        }
+
+        function formatHold(seconds) {
+            const s = Number(seconds || 0);
+            if (s < 60) return `${Math.floor(s)}s`;
+            if (s < 3600) return `${Math.floor(s / 60)}m`;
+            if (s < 86400) return `${Math.floor(s / 3600)}h`;
+            return `${Math.floor(s / 86400)}d`;
+        }
+
+        function renderMetricGrid(targetId, items) {
+            document.getElementById(targetId).innerHTML = items.map(([label, value]) => `
+                <div class="metric-card">
+                    <div class="metric-label">${label}</div>
+                    <div class="metric-value">${value}</div>
+                </div>
+            `).join('');
+        }
+
+        async function update() {
+            const t = Date.now();
+            try {
+                const [resA, resO, resP, resW, resPerf, resH, resWatch, resNews] = await Promise.all([
+                    fetch('/api/all?limit=200&t='+t).then(r => r.json()),
+                    fetch('/api/opps?t='+t).then(r => r.json()),
+                    fetch('/api/portfolio?t='+t).then(r => r.json()),
+                    fetch('/api/wallet?t='+t).then(r => r.json()),
+                    fetch('/api/performance?t='+t).then(r => r.json()),
+                    fetch('/api/history?t='+t).then(r => r.json()),
+                    fetch('/api/watchlist?t='+t).then(r => r.json()),
+                    fetch('/api/news?t='+t).then(r => r.json())
+                ]);
+
+                document.getElementById('w-bal').innerText = '$' + resW.current_balance.toFixed(2);
+                const pnl = resW.current_balance - resW.initial_bal;
+                document.getElementById('w-pnl').innerText = (pnl>=0?'+':'') + '$' + pnl.toFixed(2);
+                document.getElementById('w-pnl').style.color = pnl>=0?'#7ee787':'#f85149';
+                document.getElementById('w-count').innerText = `${resW.buy_count} / ${resW.sell_count}`;
+
+                document.getElementById('list-all').innerHTML = resA.map(i => `
+                    <div class="row" onclick="window.open('https://pump.fun/${i.addr}')" style="cursor:pointer">
+                        <div style="color:var(--dim)">${i.monitor_time || i.scan_time || '-'}</div>
+                        <div style="color:var(--warning)">${i.token_age || i.age || '-'}</div>
+                        <div class="symbol-box"><span class="symbol">${i.symbol}</span><span class="addr">${i.addr.substring(0,4)}...${i.addr.substring(i.addr.length-4)}</span></div>
+                        <div class="val" style="color:var(--highlight)">$${parseFloat(i.price).toFixed(8)}</div>
+                        <div class="val">$${parseFloat(i.liquidity).toLocaleString()}</div>
+                        <div class="val">${Number(i.holder_count_estimate || 0) > 0 ? formatPct(i.top10_owner_pct || 0) : '-'}</div>
+                        <div class="val">${Number(i.holder_count_estimate || 0) > 0 ? Number(i.holder_count_estimate || 0).toFixed(0) : '-'}</div>
+                        <div class="val" style="color:${riskColor(i)}">${i.bundle_risk_label || '待查'}</div>
+                        <div><span class="score-pill">${i.score.toFixed(0)}</span></div>
+                        <div style="text-align:right"><button class="btn btn-internal">PUMP K线</button></div>
+                    </div>
+                `).join('');
+
+                document.getElementById('list-opps').innerHTML = resO.map(i => `
+                    <div style="margin:8px; padding:12px; background:#1c2128; border-radius:6px; border:1px solid #30363d; border-left:4px solid #f1e05a;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="font-weight:bold; color:#f0f6fc;">${i.symbol}</span>
+                            <span class="score-pill">${i.score.toFixed(0)}分</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--dim); margin-bottom:10px;">${i.reason}</div>
+                        <div style="display:flex; gap:5px;">
+                            <a href="https://pump.fun/${i.addr}" target="_blank" class="btn btn-internal" style="flex:1">去内盘看K线</a>
+                            <a href="https://rugcheck.xyz/tokens/${i.addr}" target="_blank" class="btn" style="background:#30363d; flex:0.5">安全审计</a>
+                        </div>
+                    </div>
+                `).join('');
+
+                document.getElementById('list-news').innerHTML = resNews.length ? resNews.map(i => `
+                    <a href="${i.url || '#'}" target="_blank" style="text-decoration:none; color:inherit">
+                        <div class="news-card" style="border-left:4px solid ${(i.source || '').startsWith('kol:') ? '#58a6ff' : '#30363d'};">
+                            <div class="news-title">${i.title}</div>
+                            <div class="news-meta">${(i.source || '').startsWith('kol:') ? 'KOL ' : ''}${i.source} | ${i.age}前 | ${i.sentiment} | 可信 ${Number(i.confidence || 0).toFixed(2)}</div>
+                            <div class="news-meta">可能带动: ${(i.entities || []).join(', ') || '-'} | 主题: ${(i.topics || []).join(', ') || '-'}</div>
+                        </div>
+                    </a>
+                `).join('') : `<div style="padding:16px; color:var(--dim);">暂无有效新闻事件，策略会继续按市场信号交易</div>`;
+
+                document.getElementById('watch-list').innerHTML = resWatch.length ? resWatch.map(i => `
+                    <div class="watch-card">
+                        <div class="watch-top">
+                            <div>
+                                <span class="symbol">${i.symbol}</span>
+                                <span class="history-meta"> ${i.watch_age} | 币龄 ${i.token_age} | 刚更新 ${i.last_update_age} | 快照 ${i.last_snapshot_age}</span>
+                            </div>
+                            <div style="text-align:right">
+                                <span class="score-pill">${Number(i.score || 0).toFixed(0)}</span><br>
+                                <span class="source-pill ${(i.last_snapshot_source || '').toLowerCase() === 'pumpportal' ? 'source-live' : 'source-fallback'}">${(i.last_snapshot_source || '-').toUpperCase()}</span>
+                            </div>
+                        </div>
+                        <div class="watch-grid">
+                            <div class="val">涨幅 ${formatPct(i.price_change_pct)}</div>
+                            <div class="val">回撤 ${formatPct(-Math.abs(i.drawdown_pct || 0))}</div>
+                            <div class="val">流动性 ${Number(i.liquidity_ratio || 0).toFixed(2)}x</div>
+                            <div class="val">Dev ${Number(i.dev_buy || 0).toFixed(2)} SOL</div>
+                            <div class="val">Holders ${Number(i.holder_count_estimate || 0).toFixed(0)}</div>
+                            <div class="val">Top10 ${formatPct(i.top10_owner_pct)}</div>
+                            <div class="val">Top20 ${formatPct(i.top20_owner_pct)}</div>
+                            <div class="val">最大户 ${formatPct(i.largest_owner_pct)}</div>
+                            <div class="val">Bundle ${i.bundle_risk_label || '低'}</div>
+                            <div class="val">进度 ${i.progress || '-'}</div>
+                            <div class="val">现价 $${Number(i.latest_price || 0).toFixed(8)}</div>
+                            <div class="val">质量 ${Number(i.launch_quality_score || 0).toFixed(0)}</div>
+                        </div>
+                        <div class="watch-reason">${i.status_reason || ''}<br>信号: ${(i.launch_signals || []).join(', ') || '-'}</div>
+                        <div style="display:flex; gap:5px;">
+                            <a href="${i.dex_url}" target="_blank" class="btn btn-internal" style="flex:1">查看 K 线</a>
+                        </div>
+                    </div>
+                `).join('') : `<div style="padding:16px; color:var(--dim);">当前没有观察中的币</div>`;
+
+                document.getElementById('list-portfolio').innerHTML = resP.map(i => {
+                    const live = (i.price_source || '').toLowerCase() === 'pumpportal';
+                    const sourceClass = live ? 'source-live' : 'source-fallback';
+                    const sourceText = live ? 'LIVE' : (i.price_source || 'fallback');
+                    return `
+                    <div class="p-row">
+                        <div class="symbol">${i.symbol}</div>
+                        <div class="val">${i.buy_time_age}<br><span style="color:var(--dim)">${i.buy_time}</span></div>
+                        <div class="val">$${Number(i.buy_price || 0).toFixed(8)}</div>
+                        <div class="val">${Number(i.quantity_estimate || 0).toFixed(2)}</div>
+                        <div class="val" style="color:var(--highlight)">$${Number(i.current_price || 0).toFixed(8)}</div>
+                        <div><span class="source-pill ${sourceClass}">${sourceText}</span><br><span class="history-meta">${i.price_update_age || '-'}</span></div>
+                        <div class="val">$${Number(i.current_value_usd || 0).toFixed(2)}</div>
+                        <div class="val" style="color:${(i.unrealized_pnl_usd || 0) >= 0 ? '#7ee787' : '#f85149'}">${(i.unrealized_pnl_usd || 0) >= 0 ? '+' : ''}$${Number(i.unrealized_pnl_usd || 0).toFixed(2)}</div>
+                        <div class="val" style="color:${(i.unrealized_pnl_pct || 0) >= 0 ? '#7ee787' : '#f85149'}">${formatPct(i.unrealized_pnl_pct || 0)}</div>
+                        <div class="val">${Number(i.moonbag_active || 0) ? '已留' : '-'}<br><span style="color:var(--dim)">锁 $${Number(i.profit_locked_usd || 0).toFixed(2)}</span></div>
+                        <div style="text-align:right"><a href="https://pump.fun/${i.addr}" target="_blank" class="btn btn-internal">查看实盘</a></div>
+                    </div>
+                `}).join('');
+
+                renderMetricGrid('performance-realized', [
+                    ['已实现利润', `${resPerf.realized_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.realized_profit_usd || 0).toFixed(2)}`],
+                    ['已实现收益率', formatPct(resPerf.realized_profit_pct)],
+                    ['现金余额', `$${Number(resPerf.cash_balance_usd || 0).toFixed(2)}`],
+                    ['已平仓', Number(resPerf.closed_trades || 0)],
+                    ['胜率', formatPct(resPerf.win_rate)],
+                    ['主要出场', resPerf.best_exit_reason || '-']
+                ]);
+
+                renderMetricGrid('performance-floating', [
+                    ['浮动利润', `${resPerf.unrealized_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.unrealized_profit_usd || 0).toFixed(2)}`],
+                    ['浮动收益率', formatPct(resPerf.unrealized_profit_pct)],
+                    ['持仓成本', `$${Number(resPerf.unrealized_cost_usd || 0).toFixed(2)}`],
+                    ['持仓市值', `$${Number(resPerf.unrealized_value_usd || 0).toFixed(2)}`],
+                    ['总权益', `$${Number(resPerf.total_equity_usd || 0).toFixed(2)}`],
+                    ['总收益率', formatPct(resPerf.total_profit_pct)]
+                ]);
+
+                renderMetricGrid('performance-quality', [
+                    ['总利润', `${resPerf.net_profit_usd >= 0 ? '+' : ''}$${Number(resPerf.net_profit_usd || 0).toFixed(2)}`],
+                    ['平均单笔', formatPct(resPerf.avg_trade_pct)],
+                    ['胜率', formatPct(resPerf.win_rate)],
+                    ['最佳单笔', formatPct(resPerf.best_trade_pct)],
+                    ['最差单笔', formatPct(resPerf.worst_trade_pct)],
+                    ['利润因子', Number(resPerf.profit_factor || 0).toFixed(2)],
+                    ['最大回撤', formatPct(resPerf.max_drawdown_pct)],
+                    ['平均持仓', formatHold(resPerf.avg_hold_seconds)],
+                    ['未平仓', Number(resPerf.open_positions || 0)]
+                ]);
+
+                document.getElementById('history-list').innerHTML = resH.map(i => `
+                    <div class="history-row">
+                        <div class="history-head">
+                            <div>
+                                <span class="symbol">${i.symbol}</span>
+                                <span class="history-meta"> ${i.side.toUpperCase()} ${i.time}</span>
+                            </div>
+                            <div class="val" style="color:${i.pnl_pct > 0 ? '#7ee787' : (i.pnl_pct < 0 ? '#f85149' : 'var(--dim)')}">
+                                ${i.pnl_pct === null || i.pnl_pct === undefined ? '-' : formatPct(i.pnl_pct)}
+                            </div>
+                        </div>
+                        <div class="history-meta">金额: $${Number(i.amount_usd || 0).toFixed(2)} | 价格: $${Number(i.price || 0).toFixed(8)}</div>
+                        <div class="history-reason">${(i.metrics && (i.metrics.entry_reason || i.metrics.exit_reason)) ? (i.metrics.entry_reason || i.metrics.exit_reason) : '无结构化原因'}</div>
+                    </div>
+                `).join('');
+
+                document.getElementById('sync-info').innerText = "LATEST SYNC: " + new Date().toLocaleTimeString();
+            } catch(e) {}
+        }
+        setInterval(update, 2000);
+        update();
+    </script>
+</body>
+</html>
