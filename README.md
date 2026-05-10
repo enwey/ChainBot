@@ -1,4 +1,4 @@
-# Investment Automation
+# ChainBot
 
 A standard Python service for monitoring new Solana opportunities, storing market signals, running paper trading by default, and optionally executing live trades when explicitly enabled.
 
