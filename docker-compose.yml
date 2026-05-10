@@ -1,0 +1,13 @@
+services:
+  chainbot:
+    build:
+      context: .
+    container_name: chainbot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./deploy/profiles/local-research.env
+    volumes:
+      - ./data:/app/data
+

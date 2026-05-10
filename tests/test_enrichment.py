@@ -103,21 +103,27 @@ class EnrichmentServiceTests(unittest.TestCase):
             "holder_refreshed_ts": 0,
         }
 
-        asyncio.run(self.service.refresh_candidate_holder_metrics("holder-1", candidate, now_ts=100))
+        asyncio.run(
+            self.service.refresh_candidate_holder_metrics("holder-1", candidate, now_ts=100)
+        )
 
         self.assertEqual(candidate["holder_refreshed_ts"], 100)
         self.assertEqual(candidate["scan"]["holder_count_estimate"], 32)
         self.assertIn("bundle_risk_score", candidate["scan"])
 
     def test_holder_enriched_scan_returns_scored_snapshot(self) -> None:
-        result = asyncio.run(self.service.holder_enriched_scan(self._scan("holder-scan"), now_ts=1000))
+        result = asyncio.run(
+            self.service.holder_enriched_scan(self._scan("holder-scan"), now_ts=1000)
+        )
 
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result["holder_count_estimate"], 32)
         self.assertIn("bundle_risk_score", result)
         self.assertIn("score", result)
-        self.assertEqual(result["scan_time"], time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(1000)))
+        self.assertEqual(
+            result["scan_time"], time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(1000))
+        )
 
     def test_refresh_unknown_metadata_fetches_only_unknown_symbols_after_interval(self) -> None:
         radar_pool = {

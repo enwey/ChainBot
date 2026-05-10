@@ -118,6 +118,11 @@ class Settings:
     min_buy_interval_seconds: int
     max_wallet_exposure_pct: float
     max_position_size_usd: float
+    max_daily_loss_usd: float
+    max_consecutive_dependency_failures: int
+    dependency_failure_window_seconds: int
+    abnormal_exit_cooldown_seconds: int
+    abnormal_exit_threshold: int
     scalp_override_enabled: bool
     scalp_min_move_pct: float
     scalp_max_drawdown_pct: float
@@ -166,6 +171,7 @@ class Settings:
     paper_buy_slippage_bps: int
     paper_sell_slippage_bps: int
     paper_fee_bps: int
+    order_idempotency_ttl_seconds: int
     monitor_poll_seconds: int
     pricing_poll_seconds: int
     holder_refresh_seconds: int
@@ -240,6 +246,11 @@ class Settings:
             min_buy_interval_seconds=_int("MIN_BUY_INTERVAL_SECONDS", 20),
             max_wallet_exposure_pct=_float("MAX_WALLET_EXPOSURE_PCT", 0.12),
             max_position_size_usd=_float("MAX_POSITION_SIZE_USD", 25.0),
+            max_daily_loss_usd=_float("MAX_DAILY_LOSS_USD", 40.0),
+            max_consecutive_dependency_failures=_int("MAX_CONSECUTIVE_DEPENDENCY_FAILURES", 4),
+            dependency_failure_window_seconds=_int("DEPENDENCY_FAILURE_WINDOW_SECONDS", 300),
+            abnormal_exit_cooldown_seconds=_int("ABNORMAL_EXIT_COOLDOWN_SECONDS", 300),
+            abnormal_exit_threshold=_int("ABNORMAL_EXIT_THRESHOLD", 2),
             scalp_override_enabled=_bool("SCALP_OVERRIDE_ENABLED", True),
             scalp_min_move_pct=_float("SCALP_MIN_MOVE_PCT", 0.08),
             scalp_max_drawdown_pct=_float("SCALP_MAX_DRAWDOWN_PCT", 0.08),
@@ -252,7 +263,9 @@ class Settings:
                 "NARRATIVE_KEYWORDS",
                 "ai,news,cpi,fed,sec,etf,cex,listing,binance,coinbase,court,war,election,trump,elon,tesla,cz,openai,nvidia",
             ),
-            trusted_kol_keywords=_csv("TRUSTED_KOL_KEYWORDS", "cz,binance,elon,trump,vitalik,solana"),
+            trusted_kol_keywords=_csv(
+                "TRUSTED_KOL_KEYWORDS", "cz,binance,elon,trump,vitalik,solana"
+            ),
             narrative_score_bonus=_float("NARRATIVE_SCORE_BONUS", 10.0),
             trusted_kol_score_bonus=_float("TRUSTED_KOL_SCORE_BONUS", 12.0),
             narrative_max_bonus=_float("NARRATIVE_MAX_BONUS", 22.0),
@@ -297,12 +310,15 @@ class Settings:
             paper_buy_slippage_bps=_int("PAPER_BUY_SLIPPAGE_BPS", 150),
             paper_sell_slippage_bps=_int("PAPER_SELL_SLIPPAGE_BPS", 200),
             paper_fee_bps=_int("PAPER_FEE_BPS", 50),
+            order_idempotency_ttl_seconds=_int("ORDER_IDEMPOTENCY_TTL_SECONDS", 180),
             monitor_poll_seconds=_int("MONITOR_POLL_SECONDS", 2),
             pricing_poll_seconds=_int("PRICING_POLL_SECONDS", 2),
             holder_refresh_seconds=_int("HOLDER_REFRESH_SECONDS", 20),
             dexscreener_timeout_seconds=_int("DEXSCREENER_TIMEOUT_SECONDS", 4),
             rpc_timeout_seconds=_int("RPC_TIMEOUT_SECONDS", 8),
-            pumpportal_ws_url=os.getenv("PUMPPORTAL_WS_URL", "wss://pumpportal.fun/api/data").strip(),
+            pumpportal_ws_url=os.getenv(
+                "PUMPPORTAL_WS_URL", "wss://pumpportal.fun/api/data"
+            ).strip(),
             dexscreener_token_url=os.getenv(
                 "DEXSCREENER_TOKEN_URL",
                 "https://api.dexscreener.com/latest/dex/tokens",
@@ -311,8 +327,12 @@ class Settings:
                 "RUGCHECK_URL",
                 "https://api.rugcheck.xyz/v1/tokens/{address}/report",
             ).strip(),
-            jupiter_quote_url=os.getenv("JUPITER_QUOTE_URL", "https://quote-api.jup.ag/v6/quote").strip(),
-            jupiter_swap_url=os.getenv("JUPITER_SWAP_URL", "https://quote-api.jup.ag/v6/swap").strip(),
+            jupiter_quote_url=os.getenv(
+                "JUPITER_QUOTE_URL", "https://quote-api.jup.ag/v6/quote"
+            ).strip(),
+            jupiter_swap_url=os.getenv(
+                "JUPITER_SWAP_URL", "https://quote-api.jup.ag/v6/swap"
+            ).strip(),
             solana_private_key=_optional("SOLANA_PRIVATE_KEY"),
         )
 
@@ -350,8 +370,20 @@ class Settings:
             errors.append("POSITION_SIZE_USD must be greater than 0.")
         if self.max_position_size_usd <= 0:
             errors.append("MAX_POSITION_SIZE_USD must be greater than 0.")
+        if self.max_daily_loss_usd <= 0:
+            errors.append("MAX_DAILY_LOSS_USD must be greater than 0.")
+        if self.order_idempotency_ttl_seconds < 1:
+            errors.append("ORDER_IDEMPOTENCY_TTL_SECONDS must be at least 1.")
         if self.max_open_positions < 1:
             errors.append("MAX_OPEN_POSITIONS must be at least 1.")
+        if self.max_consecutive_dependency_failures < 1:
+            errors.append("MAX_CONSECUTIVE_DEPENDENCY_FAILURES must be at least 1.")
+        if self.dependency_failure_window_seconds < 1:
+            errors.append("DEPENDENCY_FAILURE_WINDOW_SECONDS must be at least 1.")
+        if self.abnormal_exit_cooldown_seconds < 1:
+            errors.append("ABNORMAL_EXIT_COOLDOWN_SECONDS must be at least 1.")
+        if self.abnormal_exit_threshold < 1:
+            errors.append("ABNORMAL_EXIT_THRESHOLD must be at least 1.")
         if self.max_watchlist_size < 1:
             errors.append("MAX_WATCHLIST_SIZE must be at least 1.")
         if self.scan_log_retention_days < 0:
@@ -369,7 +401,9 @@ class Settings:
         if not 0 <= self.min_watch_score <= 100:
             errors.append("MIN_WATCH_SCORE must be between 0 and 100.")
         if self.min_watch_score > self.min_score_to_buy:
-            warnings.append("MIN_WATCH_SCORE is higher than MIN_SCORE_TO_BUY, which narrows the watch funnel.")
+            warnings.append(
+                "MIN_WATCH_SCORE is higher than MIN_SCORE_TO_BUY, which narrows the watch funnel."
+            )
         if self.min_dev_buy_sol > self.max_dev_buy_sol:
             errors.append("MIN_DEV_BUY_SOL cannot be greater than MAX_DEV_BUY_SOL.")
         if self.min_liquidity_usd > self.max_liquidity_usd:
@@ -379,7 +413,9 @@ class Settings:
         if self.is_live_mode and not self.solana_private_key:
             errors.append("SOLANA_PRIVATE_KEY is required when live trading is enabled.")
         if self.binds_public_interface and not self.admin_api_token:
-            errors.append("ADMIN_API_TOKEN is required when APP_HOST is not bound to a loopback interface.")
+            errors.append(
+                "ADMIN_API_TOKEN is required when APP_HOST is not bound to a loopback interface."
+            )
         if not self.resolved_web_dir.exists():
             errors.append(f"WEB_DIR does not exist: {self.resolved_web_dir}")
         if not self.rpc_url:

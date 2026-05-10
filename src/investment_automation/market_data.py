@@ -9,12 +9,16 @@ from typing import Any, Dict, Optional, Set, Tuple
 import requests
 import websockets
 
+from .runtime_safety import DependencyFailureRecord, RuntimeSafetyManager
 from .settings import Settings
 
 
 class MarketDataClient:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, *, failure_sink: RuntimeSafetyManager | None = None
+    ) -> None:
         self.settings = settings
+        self.failure_sink = failure_sink
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "investment-automation/0.1"})
         self._holder_cache: dict[str, tuple[float, dict[str, float]]] = {}
@@ -76,7 +80,9 @@ class MarketDataClient:
         self._desired_token_subscriptions = desired
         await self._sync_token_subscriptions()
 
-    def get_realtime_snapshot(self, address: str, max_age_seconds: int = 8) -> Optional[dict[str, Any]]:
+    def get_realtime_snapshot(
+        self, address: str, max_age_seconds: int = 8
+    ) -> Optional[dict[str, Any]]:
         cached = self._trade_cache.get(address)
         if not cached:
             return None
@@ -88,15 +94,25 @@ class MarketDataClient:
         return dict(self._metadata_cache.get(address) or {})
 
     def fetch_token_metadata(self, addresses: list[str]) -> dict[str, dict[str, Any]]:
-        missing = [address for address in addresses if address and not self._metadata_cache.get(address, {}).get("symbol")]
+        missing = [
+            address
+            for address in addresses
+            if address and not self._metadata_cache.get(address, {}).get("symbol")
+        ]
         if not missing:
-            return {address: self.get_token_metadata(address) for address in addresses if self.get_token_metadata(address)}
+            return {
+                address: self.get_token_metadata(address)
+                for address in addresses
+                if self.get_token_metadata(address)
+            }
 
-        response = self.session.get(
+        response = self._request(
+            self.session.get,
+            "dexscreener",
+            "fetch_token_metadata",
             f"{self.settings.dexscreener_token_url}/" + ",".join(missing),
             timeout=self.settings.dexscreener_timeout_seconds,
         )
-        response.raise_for_status()
         payload = response.json()
         for pair in payload.get("pairs") or []:
             if pair.get("chainId") != "solana":
@@ -113,7 +129,11 @@ class MarketDataClient:
                 }
             )
             self._merge_token_metadata(address, metadata)
-        return {address: self.get_token_metadata(address) for address in addresses if self.get_token_metadata(address)}
+        return {
+            address: self.get_token_metadata(address)
+            for address in addresses
+            if self.get_token_metadata(address)
+        }
 
     def fetch_prices(self, addresses: list[str]) -> dict[str, float]:
         snapshots = self.fetch_snapshots(addresses)
@@ -135,11 +155,13 @@ class MarketDataClient:
             return snapshots
 
         for batch in self._chunks(missing, 30):
-            response = self.session.get(
+            response = self._request(
+                self.session.get,
+                "dexscreener",
+                "fetch_snapshots",
                 f"{self.settings.dexscreener_token_url}/" + ",".join(batch),
                 timeout=self.settings.dexscreener_timeout_seconds,
             )
-            response.raise_for_status()
             payload = response.json()
             for pair in payload.get("pairs") or []:
                 if pair.get("chainId") != "solana":
@@ -183,11 +205,13 @@ class MarketDataClient:
 
     def rugcheck_is_safe(self, address: str) -> bool:
         try:
-            response = self.session.get(
+            response = self._request(
+                self.session.get,
+                "rugcheck",
+                "safety_check",
                 self.settings.rugcheck_url.format(address=address),
                 timeout=5,
             )
-            response.raise_for_status()
             payload = response.json()
         except Exception:
             return False
@@ -214,7 +238,9 @@ class MarketDataClient:
 
         try:
             supply_resp = self._rpc_call("getTokenSupply", [mint, {"commitment": "confirmed"}])
-            largest_resp = self._rpc_call("getTokenLargestAccounts", [mint, {"commitment": "confirmed"}])
+            largest_resp = self._rpc_call(
+                "getTokenLargestAccounts", [mint, {"commitment": "confirmed"}]
+            )
         except Exception:
             return rugcheck_metrics
 
@@ -228,7 +254,9 @@ class MarketDataClient:
         if not largest_accounts:
             return rugcheck_metrics or self._empty_holder_metrics(total_supply=total_supply)
 
-        account_addresses = [item.get("address") for item in largest_accounts if item.get("address")]
+        account_addresses = [
+            item.get("address") for item in largest_accounts if item.get("address")
+        ]
         owners = self._fetch_token_account_owners(account_addresses)
 
         owner_balances = {}
@@ -258,7 +286,9 @@ class MarketDataClient:
             "top20_token_pct": top20_token_balance / denominator,
             "top10_owner_pct": top10_owner_balance / denominator,
             "top20_owner_pct": top20_owner_balance / denominator,
-            "largest_owner_pct": (sorted_owner_balances[0] / denominator) if sorted_owner_balances else 0.0,
+            "largest_owner_pct": (sorted_owner_balances[0] / denominator)
+            if sorted_owner_balances
+            else 0.0,
             "total_supply": total_supply,
         }
         self._holder_cache[mint] = (now, metrics)
@@ -266,11 +296,13 @@ class MarketDataClient:
 
     def _rugcheck_holder_metrics(self, mint: str, total_supply: float = 0.0) -> dict[str, float]:
         try:
-            response = self.session.get(
+            response = self._request(
+                self.session.get,
+                "rugcheck",
+                "holder_metrics",
                 self.settings.rugcheck_url.format(address=mint),
                 timeout=5,
             )
-            response.raise_for_status()
             payload = response.json()
         except Exception:
             return self._empty_holder_metrics(total_supply=total_supply)
@@ -320,7 +352,7 @@ class MarketDataClient:
             return {}
         owners = {}
         for i in range(0, len(addresses), 100):
-            chunk = addresses[i:i + 100]
+            chunk = addresses[i : i + 100]
             try:
                 result = self._rpc_call(
                     "getMultipleAccounts",
@@ -330,21 +362,25 @@ class MarketDataClient:
                 continue
             values = (result or {}).get("value") or []
             for address, account in zip(chunk, values):
-                parsed = (((account or {}).get("data") or {}).get("parsed") or {})
-                owner = (((parsed.get("info") or {}).get("owner")))
+                parsed = ((account or {}).get("data") or {}).get("parsed") or {}
+                owner = (parsed.get("info") or {}).get("owner")
                 if owner:
                     owners[address] = owner
         return owners
 
     def _rpc_call(self, method: str, params: list) -> dict:
-        response = self.session.post(
+        response = self._request(
+            self.session.post,
+            "solana_rpc",
+            method,
             self.settings.rpc_url,
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
             timeout=self.settings.rpc_timeout_seconds,
         )
-        response.raise_for_status()
         payload = response.json()
         if payload.get("error"):
+            exc = RuntimeError(payload["error"])
+            self._record_dependency_failure("solana_rpc", method, exc)
             raise RuntimeError(payload["error"])
         return payload.get("result") or {}
 
@@ -364,9 +400,12 @@ class MarketDataClient:
         try:
             while True:
                 try:
-                    async with websockets.connect(self.settings.pumpportal_ws_url, ping_interval=20, ping_timeout=20) as ws:
+                    async with websockets.connect(
+                        self.settings.pumpportal_ws_url, ping_interval=20, ping_timeout=20
+                    ) as ws:
                         self._ws = ws
                         self._active_token_subscriptions = set()
+                        self._record_dependency_success("pumpportal_ws", "connect")
                         await self._send_json({"method": "subscribeNewToken"})
                         await self._sync_token_subscriptions()
                         async for raw in ws:
@@ -377,9 +416,10 @@ class MarketDataClient:
                             self._handle_stream_payload(payload)
                 except asyncio.CancelledError:
                     raise
-                except Exception:
+                except Exception as exc:
                     self._ws = None
                     self._active_token_subscriptions = set()
+                    self._record_dependency_failure("pumpportal_ws", "connect", exc)
                     await asyncio.sleep(self.settings.monitor_poll_seconds)
         finally:
             self._ws = None
@@ -419,7 +459,9 @@ class MarketDataClient:
         snapshot.update(self.get_token_metadata(address))
         self._trade_cache[address] = snapshot
 
-    def _extract_trade_snapshot(self, payload: dict[str, Any]) -> Optional[Tuple[str, dict[str, float]]]:
+    def _extract_trade_snapshot(
+        self, payload: dict[str, Any]
+    ) -> Optional[Tuple[str, dict[str, float]]]:
         address = self._payload_address(payload)
         if not address:
             return None
@@ -505,6 +547,36 @@ class MarketDataClient:
                 return numeric
         return 0.0
 
+    def _request(self, method, dependency: str, operation: str, url: str, **kwargs):
+        try:
+            response = method(url, **kwargs)
+            response.raise_for_status()
+        except Exception as exc:
+            self._record_dependency_failure(dependency, operation, exc)
+            raise
+        self._record_dependency_success(dependency, operation)
+        return response
+
+    def _record_dependency_failure(self, dependency: str, operation: str, exc: Exception) -> None:
+        if self.failure_sink is None:
+            return
+        self.failure_sink.record_dependency_failure(
+            DependencyFailureRecord(
+                component="market_data",
+                dependency=dependency,
+                operation=operation,
+                message=str(exc),
+                occurred_ts=int(time.time()),
+                failure_class=exc.__class__.__name__,
+                metadata={},
+            )
+        )
+
+    def _record_dependency_success(self, dependency: str, operation: str) -> None:
+        if self.failure_sink is None:
+            return
+        self.failure_sink.record_dependency_success("market_data", dependency, operation)
+
 
 def build_scan_record(payload: dict[str, Any], sol_price_usd: float) -> dict[str, Any]:
     dev_buy = float(payload.get("solAmount", 0) or 0)
@@ -514,7 +586,9 @@ def build_scan_record(payload: dict[str, Any], sol_price_usd: float) -> dict[str
     has_socials = bool(payload.get("twitter") or payload.get("telegram") or payload.get("website"))
     progress = f"{int(min(max(market_cap_usd / 690, 0), 100))}%"
     first_seen_ts = int(time.time())
-    created_ts = _normalize_timestamp(payload.get("created_timestamp") or payload.get("createdAt") or payload.get("created_at"))
+    created_ts = _normalize_timestamp(
+        payload.get("created_timestamp") or payload.get("createdAt") or payload.get("created_at")
+    )
     if created_ts <= 0:
         created_ts = first_seen_ts
     token_age_seconds = max(first_seen_ts - created_ts, 0) if created_ts > 0 else None
@@ -546,7 +620,12 @@ def build_scan_record(payload: dict[str, Any], sol_price_usd: float) -> dict[str
         score -= 5.0
     score = max(min(score, 100.0), 0.0)
 
-    symbol = str(payload.get("symbol") or payload.get("ticker") or payload.get("name") or "UNKNOWN").strip() or "UNKNOWN"
+    symbol = (
+        str(
+            payload.get("symbol") or payload.get("ticker") or payload.get("name") or "UNKNOWN"
+        ).strip()
+        or "UNKNOWN"
+    )
     return {
         "scan_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(first_seen_ts)),
         "platform": "PUMP",

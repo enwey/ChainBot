@@ -49,7 +49,9 @@ class ObservationService:
             "samples": [{"ts": now, "price": float(scan["price"]), "volume_5m": 0.0}],
         }
         if len(radar_pool) > self.settings.max_radar_tracked_tokens:
-            oldest = sorted(radar_pool.items(), key=lambda item: int(item[1].get("first_seen_ts", 0)))
+            oldest = sorted(
+                radar_pool.items(), key=lambda item: int(item[1].get("first_seen_ts", 0))
+            )
             overflow = max(len(radar_pool) - self.settings.max_radar_tracked_tokens, 0)
             for old_addr, _ in oldest[:overflow]:
                 radar_pool.pop(old_addr, None)
@@ -86,15 +88,21 @@ class ObservationService:
             return None
 
         current_liquidity = float(snapshot.get("liquidity_usd") or scan.get("liquidity") or 0.0)
-        candidate["highest_price"] = max(float(candidate.get("highest_price") or current_price), current_price)
+        candidate["highest_price"] = max(
+            float(candidate.get("highest_price") or current_price), current_price
+        )
         candidate["last_update_ts"] = now
         self.append_price_sample(candidate, snapshot, now_ts=now)
         abnormal, abnormal_reason = self.abnormal_kline_reason(candidate)
         if abnormal:
-            return RadarObservationDecision(scan=scan, rejected_reason=abnormal_reason, record_scan=False)
+            return RadarObservationDecision(
+                scan=scan, rejected_reason=abnormal_reason, record_scan=False
+            )
 
         initial_price = max(float(candidate.get("initial_price") or current_price), 0.000000001)
-        initial_liquidity = max(float(candidate.get("initial_liquidity") or current_liquidity or 1), 0.000000001)
+        initial_liquidity = max(
+            float(candidate.get("initial_liquidity") or current_liquidity or 1), 0.000000001
+        )
         price_change_pct = (current_price - initial_price) / initial_price
         liquidity_ratio = current_liquidity / initial_liquidity
 
@@ -133,7 +141,9 @@ class ObservationService:
         if current_price <= 0:
             return None
 
-        current_liquidity = float(snapshot.get("liquidity_usd") or candidate.get("latest_liquidity") or 0.0)
+        current_liquidity = float(
+            snapshot.get("liquidity_usd") or candidate.get("latest_liquidity") or 0.0
+        )
         candidate["latest_price"] = current_price
         candidate["latest_liquidity"] = current_liquidity
         candidate["highest_price"] = max(float(candidate["highest_price"]), current_price)
@@ -155,7 +165,9 @@ class ObservationService:
         initial_price = max(float(candidate["initial_price"]), 0.000000001)
         initial_liquidity = max(float(candidate["initial_liquidity"]), 0.000000001)
         price_change_pct = (current_price - initial_price) / initial_price
-        drawdown_pct = (float(candidate["highest_price"]) - current_price) / max(float(candidate["highest_price"]), 0.000000001)
+        drawdown_pct = (float(candidate["highest_price"]) - current_price) / max(
+            float(candidate["highest_price"]), 0.000000001
+        )
         liquidity_ratio = current_liquidity / initial_liquidity
 
         confirmed_scan = deepcopy(scan)
@@ -178,7 +190,7 @@ class ObservationService:
         if drawdown_pct > self.settings.max_observation_drawdown_pct:
             return WatchObservationDecision(
                 scan=confirmed_scan,
-                rejected_reason=f"瑙傚療鏈熷洖鎾よ繃澶?{drawdown_pct*100:.1f}%",
+                rejected_reason=f"瑙傚療鏈熷洖鎾よ繃澶?{drawdown_pct * 100:.1f}%",
                 watch_reason=None,
                 open_reason=None,
                 record_scan=True,
@@ -195,7 +207,9 @@ class ObservationService:
             return WatchObservationDecision(
                 scan=confirmed_scan,
                 rejected_reason=None,
-                watch_reason=self.watch_update_reason(confirmed_scan, elapsed, price_change_pct, liquidity_ratio),
+                watch_reason=self.watch_update_reason(
+                    confirmed_scan, elapsed, price_change_pct, liquidity_ratio
+                ),
                 open_reason=None,
                 record_scan=True,
             )
@@ -238,13 +252,17 @@ class ObservationService:
             return WatchObservationDecision(
                 scan=confirmed_scan,
                 rejected_reason=None,
-                watch_reason=self.watch_update_reason(confirmed_scan, elapsed, price_change_pct, liquidity_ratio),
+                watch_reason=self.watch_update_reason(
+                    confirmed_scan, elapsed, price_change_pct, liquidity_ratio
+                ),
                 open_reason=None,
                 record_scan=True,
             )
 
         if scalp_override:
-            confirmed_scan["score"] = max(float(confirmed_scan["score"]), self.settings.min_score_to_buy)
+            confirmed_scan["score"] = max(
+                float(confirmed_scan["score"]), self.settings.min_score_to_buy
+            )
             confirmed_scan["scalp_reason"] = scalp_reason
             candidate["scan"] = deepcopy(confirmed_scan)
 
@@ -252,7 +270,9 @@ class ObservationService:
             scan=confirmed_scan,
             rejected_reason=None,
             watch_reason=None,
-            open_reason=self.watch_confirmed_reason(elapsed, price_change_pct, drawdown_pct, liquidity_ratio),
+            open_reason=self.watch_confirmed_reason(
+                elapsed, price_change_pct, drawdown_pct, liquidity_ratio
+            ),
             record_scan=True,
         )
 
@@ -276,20 +296,20 @@ class ObservationService:
         if holders < self.settings.scalp_min_holders:
             return False, f"scalp holders too low {holders}"
         if largest >= 0.92:
-            return False, f"scalp largest wallet too high {largest*100:.1f}%"
+            return False, f"scalp largest wallet too high {largest * 100:.1f}%"
         if elapsed < max(4, min(self.settings.min_observation_seconds, 8)):
             return False, "scalp needs a few live samples"
         if price_change_pct < self.settings.scalp_min_move_pct:
-            return False, f"scalp move too weak {price_change_pct*100:.1f}%"
+            return False, f"scalp move too weak {price_change_pct * 100:.1f}%"
         if drawdown_pct > self.settings.scalp_max_drawdown_pct:
-            return False, f"scalp drawdown too high {drawdown_pct*100:.1f}%"
+            return False, f"scalp drawdown too high {drawdown_pct * 100:.1f}%"
         if liquidity_ratio < self.settings.scalp_min_liquidity_ratio:
             return False, f"scalp liquidity faded {liquidity_ratio:.2f}x"
         if volume_5m < self.settings.scalp_min_volume_5m_usd:
             return False, f"scalp volume too low ${volume_5m:.1f}"
         return True, (
-            f"scalp override: move={price_change_pct*100:.1f}%, "
-            f"drawdown={drawdown_pct*100:.1f}%, liq={liquidity_ratio:.2f}x, "
+            f"scalp override: move={price_change_pct * 100:.1f}%, "
+            f"drawdown={drawdown_pct * 100:.1f}%, liq={liquidity_ratio:.2f}x, "
             f"vol5m=${volume_5m:.1f}, holders={holders}"
         )
 
@@ -317,7 +337,11 @@ class ObservationService:
         if not self.settings.abnormal_kline_enabled:
             return False, ""
 
-        samples = [sample for sample in candidate.get("samples", []) if float(sample.get("price") or 0.0) > 0]
+        samples = [
+            sample
+            for sample in candidate.get("samples", [])
+            if float(sample.get("price") or 0.0) > 0
+        ]
         if len(samples) < self.settings.abnormal_kline_min_samples:
             return False, ""
 
@@ -330,7 +354,10 @@ class ObservationService:
         highest_price = max(float(sample["price"]) for sample in samples)
         gain_pct = (last_price - first_price) / first_price
         max_drawdown_pct = (highest_price - last_price) / max(highest_price, 0.000000001)
-        moves = [float(samples[i]["price"]) - float(samples[i - 1]["price"]) for i in range(1, len(samples))]
+        moves = [
+            float(samples[i]["price"]) - float(samples[i - 1]["price"])
+            for i in range(1, len(samples))
+        ]
         down_move_ratio = len([move for move in moves if move < 0]) / max(len(moves), 1)
         flat_or_up_ratio = len([move for move in moves if move >= 0]) / max(len(moves), 1)
         volume_5m = max(float(sample.get("volume_5m") or 0.0) for sample in samples)
@@ -351,8 +378,8 @@ class ObservationService:
                 True,
                 (
                     "寮傚父K绾? 浣庢垚浜ゆ満姊版媺鍗?"
-                    f"gain={gain_pct*100:.1f}%, drawdown={max_drawdown_pct*100:.1f}%, "
-                    f"down_moves={down_move_ratio*100:.0f}%, volume5m=${volume_5m:.0f}"
+                    f"gain={gain_pct * 100:.1f}%, drawdown={max_drawdown_pct * 100:.1f}%, "
+                    f"down_moves={down_move_ratio * 100:.0f}%, volume5m=${volume_5m:.0f}"
                 ),
             )
         return False, ""
@@ -369,7 +396,7 @@ class ObservationService:
         liquidity_ratio: float,
     ) -> str:
         return (
-            f"瑙傚療涓?{elapsed}s: move={price_change_pct*100:.1f}%, "
+            f"瑙傚療涓?{elapsed}s: move={price_change_pct * 100:.1f}%, "
             f"liq={liquidity_ratio:.2f}x, quality={float(scan.get('launch_quality_score') or 0):.0f}, "
             f"bundle={self.scorer.bundle_risk_label(float(scan.get('bundle_risk_score') or 0))}, 绛夊緟纭淇″彿"
         )
@@ -382,6 +409,6 @@ class ObservationService:
         liquidity_ratio: float,
     ) -> str:
         return (
-            f"瑙傚療纭涔板叆: watch={elapsed}s, move={price_change_pct*100:.1f}%, "
-            f"drawdown={drawdown_pct*100:.1f}%, liq={liquidity_ratio:.2f}x"
+            f"瑙傚療纭涔板叆: watch={elapsed}s, move={price_change_pct * 100:.1f}%, "
+            f"drawdown={drawdown_pct * 100:.1f}%, liq={liquidity_ratio:.2f}x"
         )

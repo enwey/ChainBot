@@ -4,8 +4,7 @@ from typing import Any, Mapping, Protocol
 
 
 class OpportunityStore(Protocol):
-    def record_opportunity(self, payload: dict[str, Any]) -> None:
-        ...
+    def record_opportunity(self, payload: dict[str, Any]) -> None: ...
 
 
 class OpportunityService:
@@ -27,7 +26,9 @@ class OpportunityService:
     def record_ignored(self, scan: Mapping[str, Any], reason: str) -> None:
         self._record("ignored", scan, reason)
 
-    def build_payload(self, opportunity_type: str, scan: Mapping[str, Any], reason: str) -> dict[str, Any]:
+    def build_payload(
+        self, opportunity_type: str, scan: Mapping[str, Any], reason: str
+    ) -> dict[str, Any]:
         return {
             "type": opportunity_type,
             "symbol": scan["symbol"],

@@ -44,11 +44,17 @@ class SignalScorer:
             signals.append("high_base_score")
         return min(score, 100.0), signals
 
-    def fast_track_launch(self, scan: dict[str, Any], quality_score: float, signals: list[str]) -> bool:
+    def fast_track_launch(
+        self, scan: dict[str, Any], quality_score: float, signals: list[str]
+    ) -> bool:
         return (
             float(scan.get("narrative_score") or 0.0) >= 12.0
             or quality_score >= self.settings.min_fast_track_score
-            or ("dev_buy_ok" in signals and "early_liquidity_ok" in signals and "clean_symbol" in signals)
+            or (
+                "dev_buy_ok" in signals
+                and "early_liquidity_ok" in signals
+                and "clean_symbol" in signals
+            )
         )
 
     def symbol_quality_ok(self, symbol: str) -> bool:
@@ -73,7 +79,9 @@ class SignalScorer:
 
     def has_socials(self, scan: dict[str, Any]) -> bool:
         raw = scan.get("socials") or "{}"
-        return any(key in raw and f'"{key}": null' not in raw for key in ("twitter", "telegram", "website"))
+        return any(
+            key in raw and f'"{key}": null' not in raw for key in ("twitter", "telegram", "website")
+        )
 
     def holder_ok(self, scan: dict[str, Any]) -> tuple[bool, str]:
         top10_owner_pct = float(scan.get("top10_owner_pct") or 0.0)
@@ -82,12 +90,14 @@ class SignalScorer:
         if holder_count > 0 and holder_count < self.settings.min_holder_count:
             return False, f"holder 数过少 {holder_count}"
         if top10_owner_pct > self.settings.max_top10_owner_pct:
-            return False, f"top10 持仓过高 {top10_owner_pct*100:.1f}%"
+            return False, f"top10 持仓过高 {top10_owner_pct * 100:.1f}%"
         if top20_owner_pct > self.settings.max_top20_owner_pct:
-            return False, f"top20 持仓过高 {top20_owner_pct*100:.1f}%"
+            return False, f"top20 持仓过高 {top20_owner_pct * 100:.1f}%"
         return True, "ok"
 
-    def observation_bonus(self, price_change_pct: float, liquidity_ratio: float, elapsed: int) -> float:
+    def observation_bonus(
+        self, price_change_pct: float, liquidity_ratio: float, elapsed: int
+    ) -> float:
         bonus = 0.0
         bonus += min(max(price_change_pct, 0.0) * 120.0, 12.0)
         bonus += min(max(liquidity_ratio - 1.0, 0.0) * 20.0, 8.0)
@@ -95,7 +105,9 @@ class SignalScorer:
             bonus += 3.0
         return bonus
 
-    def radar_momentum_bonus(self, price_change_pct: float, liquidity_ratio: float, elapsed: int) -> float:
+    def radar_momentum_bonus(
+        self, price_change_pct: float, liquidity_ratio: float, elapsed: int
+    ) -> float:
         bonus = 0.0
         bonus += min(max(price_change_pct, 0.0) * 80.0, 10.0)
         bonus += min(max(liquidity_ratio - 1.0, 0.0) * 15.0, 6.0)
@@ -188,7 +200,11 @@ class SignalScorer:
         if largest >= self.settings.bundle_risk_largest_owner_pct:
             score += min((largest - self.settings.bundle_risk_largest_owner_pct) * 4.0, 0.35)
         if holders > 0 and holders <= self.settings.bundle_risk_min_holders:
-            score += min((self.settings.bundle_risk_min_holders - holders) / max(self.settings.bundle_risk_min_holders, 1), 0.25)
+            score += min(
+                (self.settings.bundle_risk_min_holders - holders)
+                / max(self.settings.bundle_risk_min_holders, 1),
+                0.25,
+            )
         return max(min(score, 1.0), 0.0)
 
     def bundle_penalty(self, bundle_risk_score: float) -> float:

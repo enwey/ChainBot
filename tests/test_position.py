@@ -71,7 +71,9 @@ class PositionServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.env_patcher.stop()
 
-    def make_service(self, *, latest_metrics: dict | None = None, holder_metrics: dict | None = None) -> PositionService:
+    def make_service(
+        self, *, latest_metrics: dict | None = None, holder_metrics: dict | None = None
+    ) -> PositionService:
         return PositionService(
             self.settings,
             self.scorer,

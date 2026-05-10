@@ -1,0 +1,81 @@
+{
+  "dataset_id": "blocked-entry",
+  "title": "Blocked entry due to ownership concentration",
+  "description": "Representative replay case where a token scores well but holder concentration blocks entry.",
+  "wallet": {
+    "initial_bal": 200.0,
+    "current_balance": 200.0,
+    "buy_count": 0,
+    "buy_total": 0.0,
+    "sell_count": 0,
+    "sell_total": 0.0
+  },
+  "scan_logs": [
+    {
+      "scan_time": "2026-05-10 09:30:00",
+      "platform": "pumpfun",
+      "symbol": "BLK",
+      "age": "2m",
+      "addr": "seed-blocked-entry",
+      "price": 0.00042,
+      "liquidity": 6400.0,
+      "dev_buy": 2.2,
+      "progress": "68%",
+      "ratio": "4.1",
+      "score": 89.0,
+      "first_seen_ts": 1778405400,
+      "created_ts": 1778405280,
+      "holder_count_estimate": 22.0,
+      "top10_owner_pct": 0.58,
+      "top20_owner_pct": 0.76,
+      "largest_owner_pct": 0.21,
+      "bundle_risk_score": 0.82,
+      "socials": "{\"twitter\":\"https://x.com/blocked\"}",
+      "dex_url": "https://dexscreener.com/solana/seed-blocked-entry"
+    }
+  ],
+  "opportunities": [
+    {
+      "type": "watch",
+      "symbol": "BLK",
+      "score": 89.0,
+      "reason": "momentum detected but ownership risk elevated",
+      "addr": "seed-blocked-entry",
+      "liq": 6400.0,
+      "vol": 410.0,
+      "dex_url": "https://dexscreener.com/solana/seed-blocked-entry",
+      "scan_time": "2026-05-10 09:30:00",
+      "socials": "{\"twitter\":\"https://x.com/blocked\"}",
+      "progress": "68%"
+    }
+  ],
+  "decision_audit": [
+    {
+      "decision_ts": 1778405460,
+      "decision_time": "2026-05-10 09:31:00",
+      "category": "entry",
+      "action": "open_position",
+      "outcome": "blocked",
+      "symbol": "BLK",
+      "addr": "seed-blocked-entry",
+      "reason": "top10 owners exceed guarded threshold",
+      "context": {
+        "strategy_mode": "balanced",
+        "execution_mode": "paper",
+        "score": 89.0
+      },
+      "snapshot": {
+        "kind": "entry",
+        "candidate": {
+          "symbol": "BLK",
+          "addr": "seed-blocked-entry",
+          "score": 89.0,
+          "top10_owner_pct": 0.58
+        },
+        "risk": {
+          "rule": "ownership_concentration"
+        }
+      }
+    }
+  ]
+}

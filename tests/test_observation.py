@@ -94,11 +94,19 @@ class ObservationServiceTests(unittest.TestCase):
         self.assertIsNotNone(decision.rejected_reason)
 
     def test_process_watch_candidate_returns_pending_reason_before_window(self) -> None:
-        candidate = self.watchlist_service.build_watch_candidate(self._scan("watch-pending"), now_ts=100)
+        candidate = self.watchlist_service.build_watch_candidate(
+            self._scan("watch-pending"), now_ts=100
+        )
 
         decision = self.service.process_watch_candidate(
             candidate,
-            {"price": 1.02, "liquidity_usd": 4200, "volume_5m": 1.5, "timestamp": 110, "source": "pumpportal"},
+            {
+                "price": 1.02,
+                "liquidity_usd": 4200,
+                "volume_5m": 1.5,
+                "timestamp": 110,
+                "source": "pumpportal",
+            },
             self._holder_metrics(holders=28, top10=0.24, top20=0.34, largest=0.08),
             "normal",
             now_ts=110,
@@ -112,11 +120,19 @@ class ObservationServiceTests(unittest.TestCase):
         self.assertIsNone(decision.open_reason)
 
     def test_process_watch_candidate_returns_confirmed_open_reason(self) -> None:
-        candidate = self.watchlist_service.build_watch_candidate(self._scan("watch-open"), now_ts=100)
+        candidate = self.watchlist_service.build_watch_candidate(
+            self._scan("watch-open"), now_ts=100
+        )
 
         decision = self.service.process_watch_candidate(
             candidate,
-            {"price": 1.08, "liquidity_usd": 4600, "volume_5m": 2.0, "timestamp": 140, "source": "pumpportal"},
+            {
+                "price": 1.08,
+                "liquidity_usd": 4600,
+                "volume_5m": 2.0,
+                "timestamp": 140,
+                "source": "pumpportal",
+            },
             self._holder_metrics(holders=36, top10=0.22, top20=0.33, largest=0.07),
             "normal",
             now_ts=140,
@@ -130,11 +146,19 @@ class ObservationServiceTests(unittest.TestCase):
         self.assertIsNotNone(decision.open_reason)
 
     def test_process_watch_candidate_allows_scalp_override_for_high_risk_distribution(self) -> None:
-        candidate = self.watchlist_service.build_watch_candidate(self._scan("watch-scalp"), now_ts=100)
+        candidate = self.watchlist_service.build_watch_candidate(
+            self._scan("watch-scalp"), now_ts=100
+        )
 
         decision = self.service.process_watch_candidate(
             candidate,
-            {"price": 1.20, "liquidity_usd": 4200, "volume_5m": 3.0, "timestamp": 140, "source": "pumpportal"},
+            {
+                "price": 1.20,
+                "liquidity_usd": 4200,
+                "volume_5m": 3.0,
+                "timestamp": 140,
+                "source": "pumpportal",
+            },
             self._holder_metrics(holders=4, top10=0.85, top20=0.92, largest=0.20),
             "normal",
             now_ts=140,

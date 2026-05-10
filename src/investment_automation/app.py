@@ -12,6 +12,7 @@ from .execution import TradeExecutor
 from .maintenance import MaintenanceService
 from .market_data import MarketDataClient
 from .news import NewsClient
+from .runtime_safety import RuntimeSafetyManager
 from .settings import Settings, get_settings
 from .web import create_server
 
@@ -32,11 +33,23 @@ class Application:
         self.settings = settings
         self.started_at = int(time.time())
         self.database = Database(settings)
+        # Ensure schema-dependent collaborators can read persisted state on first boot.
+        self.database.initialize()
         self.maintenance = MaintenanceService(settings, self.database)
-        self.market_data = MarketDataClient(settings)
-        self.news_client = NewsClient(settings)
-        self.executor = TradeExecutor(settings, self.market_data)
-        self.engine = TradingEngine(settings, self.database, self.market_data, self.executor, self.news_client)
+        self.runtime_safety = RuntimeSafetyManager(settings)
+        self.market_data = MarketDataClient(settings, failure_sink=self.runtime_safety)
+        self.news_client = NewsClient(settings, failure_sink=self.runtime_safety)
+        self.executor = TradeExecutor(
+            settings, self.market_data, safety_manager=self.runtime_safety
+        )
+        self.engine = TradingEngine(
+            settings,
+            self.database,
+            self.market_data,
+            self.executor,
+            self.news_client,
+            runtime_safety=self.runtime_safety,
+        )
         self.server = create_server(
             settings=settings,
             database=self.database,
@@ -49,7 +62,6 @@ class Application:
         self._stopped = False
 
     def bootstrap(self) -> None:
-        self.database.initialize()
         try:
             self.maintenance.run_startup_tasks()
         except Exception:
@@ -85,6 +97,7 @@ class Application:
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=5)
 
+        self.engine.close()
         await self.market_data.aclose()
         self.executor.close()
         self.news_client.close()

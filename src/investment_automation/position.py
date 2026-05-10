@@ -62,7 +62,7 @@ class PositionService:
             f"score={scan['score']:.0f}, age={self.watchlist_service.token_age_text(scan)}, "
             f"dev={scan['dev_buy']:.2f} SOL, liq=${scan['liquidity']:.0f}, "
             f"narrative={scan.get('narrative_label', '-')}, "
-            f"top10={float(scan.get('top10_owner_pct') or 0)*100:.1f}%, holders={int(float(scan.get('holder_count_estimate') or 0))}, "
+            f"top10={float(scan.get('top10_owner_pct') or 0) * 100:.1f}%, holders={int(float(scan.get('holder_count_estimate') or 0))}, "
             f"bundle={self.scorer.bundle_risk_label(float(scan.get('bundle_risk_score') or 0))}, "
             f"mode={'scalp' if scan.get('scalp_override') else 'normal'}, "
             f"size=${position_size_usd:.2f}"
@@ -84,7 +84,9 @@ class PositionService:
     ) -> Optional[str]:
         if hold_seconds < 3 or pnl_pct >= 0.08:
             return None
-        holder_metrics = await asyncio.to_thread(self.market_data.fetch_holder_metrics, position["addr"])
+        holder_metrics = await asyncio.to_thread(
+            self.market_data.fetch_holder_metrics, position["addr"]
+        )
         holders = int(float(holder_metrics.get("holder_count_estimate") or 0))
         if holders <= 0:
             return None
@@ -97,8 +99,8 @@ class PositionService:
         bundle_risk = self.scorer.bundle_risk_score(scan)
         if bundle_risk >= 0.85:
             return (
-                f"holders={holders}, top10={scan['top10_owner_pct']*100:.1f}%, "
-                f"largest={scan['largest_owner_pct']*100:.1f}%, risk={self.scorer.bundle_risk_label(bundle_risk)}"
+                f"holders={holders}, top10={scan['top10_owner_pct'] * 100:.1f}%, "
+                f"largest={scan['largest_owner_pct'] * 100:.1f}%, risk={self.scorer.bundle_risk_label(bundle_risk)}"
             )
         return None
 
@@ -115,7 +117,9 @@ class PositionService:
         if int(position.get("moonbag_active") or 0):
             return None
         entry_metrics = self.database.latest_buy_metrics(position["addr"])
-        has_narrative = float(entry_metrics.get("narrative_score") or 0.0) > 0 or bool(entry_metrics.get("narrative_tags"))
+        has_narrative = float(entry_metrics.get("narrative_score") or 0.0) > 0 or bool(
+            entry_metrics.get("narrative_tags")
+        )
         if has_narrative:
             return None
         if pnl_pct >= self.settings.zombie_min_profit_keep_pct:
@@ -124,11 +128,17 @@ class PositionService:
         updated_ts = int(float(snapshot.get("timestamp") or position.get("price_updated_ts") or 0))
         now = now_ts if now_ts is not None else int(time.time())
         non_live_age = max(now - updated_ts, 0) if source != "pumpportal" and updated_ts > 0 else 0
-        if hold_seconds >= self.settings.zombie_position_seconds and volume_5m <= self.settings.zombie_min_volume_5m_usd:
+        if (
+            hold_seconds >= self.settings.zombie_position_seconds
+            and volume_5m <= self.settings.zombie_min_volume_5m_usd
+        ):
             return f"持仓 {hold_seconds}s 且 5m 成交仅 ${volume_5m:.0f}"
         if hold_seconds >= self.settings.zombie_position_seconds and source != "pumpportal":
             return f"持仓 {hold_seconds}s 且无实时成交流 source={source or '-'}"
-        if non_live_age >= self.settings.zombie_non_live_seconds and volume_5m <= self.settings.zombie_min_volume_5m_usd:
+        if (
+            non_live_age >= self.settings.zombie_non_live_seconds
+            and volume_5m <= self.settings.zombie_min_volume_5m_usd
+        ):
             return f"非实时行情 {non_live_age}s 且 5m 成交 ${volume_5m:.0f}"
         return None
 
@@ -168,7 +178,9 @@ class PositionService:
             "position_age_seconds": hold_seconds,
         }
 
-        zombie_reason = self.zombie_exit_reason(position, snapshot, pnl_pct, hold_seconds, volume_5m, now_ts=now_ts)
+        zombie_reason = self.zombie_exit_reason(
+            position, snapshot, pnl_pct, hold_seconds, volume_5m, now_ts=now_ts
+        )
         if zombie_reason:
             context["zombie_reason"] = zombie_reason
             return "zombie_position_exit", context, 1.0
@@ -176,16 +188,26 @@ class PositionService:
         if pnl_pct <= self.settings.emergency_stop_loss_pct:
             return "emergency_stop", context, 1.0
 
-        if hold_seconds >= 8 and not liquidity_missing and liquidity_ratio <= self.settings.emergency_liquidity_ratio:
+        if (
+            hold_seconds >= 8
+            and not liquidity_missing
+            and liquidity_ratio <= self.settings.emergency_liquidity_ratio
+        ):
             return "liquidity_break", context, 1.0
 
-        if peak_gain_pct >= self.settings.fast_exit_peak_pct and drawdown_from_peak_pct >= self.settings.fast_exit_drawdown_pct:
+        if (
+            peak_gain_pct >= self.settings.fast_exit_peak_pct
+            and drawdown_from_peak_pct >= self.settings.fast_exit_drawdown_pct
+        ):
             if int(position.get("moonbag_active") or 0):
                 return "moonbag_parabolic_exit", context, 1.0
             return "profit_lock_moonbag", context, self.settings.profit_lock_sell_pct
 
         if pnl_pct >= self.settings.profit_lock_min_pct:
-            if drawdown_from_peak_pct >= self.settings.profit_lock_drawdown_pct and liquidity_ratio <= self.settings.profit_lock_liquidity_ratio:
+            if (
+                drawdown_from_peak_pct >= self.settings.profit_lock_drawdown_pct
+                and liquidity_ratio <= self.settings.profit_lock_liquidity_ratio
+            ):
                 if int(position.get("moonbag_active") or 0):
                     return "moonbag_momentum_exit", context, 1.0
                 return "profit_lock_moonbag", context, self.settings.profit_lock_sell_pct
@@ -225,12 +247,17 @@ class PositionService:
         buy_price = float(position["buy_price"])
         max_price = max(float(position["max_price"]), sell_price)
         pnl_pct = (sell_price - buy_price) / buy_price
-        hold_seconds = self.hold_seconds(str(position["buy_time"]), now_ts=float(now_ts) if now_ts is not None else None)
+        hold_seconds = self.hold_seconds(
+            str(position["buy_time"]), now_ts=float(now_ts) if now_ts is not None else None
+        )
 
         holder_exit_reason = await self.holder_risk_exit_reason(position, pnl_pct, hold_seconds)
         if holder_exit_reason:
             exit_reason = "holder_risk_cut"
-            exit_context = {"holder_risk_reason": holder_exit_reason, "position_age_seconds": hold_seconds}
+            exit_context = {
+                "holder_risk_reason": holder_exit_reason,
+                "position_age_seconds": hold_seconds,
+            }
             sell_fraction = 1.0
         else:
             exit_reason, exit_context, sell_fraction = self.dynamic_exit_signal(

@@ -1,0 +1,110 @@
+{
+  "dataset_id": "successful-entry",
+  "title": "Successful paper entry with position left open",
+  "description": "Representative entry replay case with a clean watch-to-buy conversion and one open position.",
+  "wallet": {
+    "initial_bal": 300.0,
+    "current_balance": 285.0,
+    "buy_count": 1,
+    "buy_total": 15.0,
+    "sell_count": 0,
+    "sell_total": 0.0
+  },
+  "scan_logs": [
+    {
+      "scan_time": "2026-05-10 10:00:00",
+      "platform": "pumpfun",
+      "symbol": "WIN",
+      "age": "90s",
+      "addr": "seed-successful-entry",
+      "price": 0.00031,
+      "liquidity": 7200.0,
+      "dev_buy": 1.8,
+      "progress": "74%",
+      "ratio": "5.2",
+      "score": 92.0,
+      "first_seen_ts": 1778407200,
+      "created_ts": 1778407110,
+      "holder_count_estimate": 38.0,
+      "top10_owner_pct": 0.24,
+      "top20_owner_pct": 0.35,
+      "largest_owner_pct": 0.08,
+      "bundle_risk_score": 0.18,
+      "socials": "{\"telegram\":\"https://t.me/win\"}",
+      "dex_url": "https://dexscreener.com/solana/seed-successful-entry"
+    }
+  ],
+  "opportunities": [
+    {
+      "type": "buy",
+      "symbol": "WIN",
+      "score": 92.0,
+      "reason": "fast track score and clean holder profile",
+      "addr": "seed-successful-entry",
+      "liq": 7200.0,
+      "vol": 560.0,
+      "dex_url": "https://dexscreener.com/solana/seed-successful-entry",
+      "scan_time": "2026-05-10 10:00:00",
+      "socials": "{\"telegram\":\"https://t.me/win\"}",
+      "progress": "74%"
+    }
+  ],
+  "decision_audit": [
+    {
+      "decision_ts": 1778407260,
+      "decision_time": "2026-05-10 10:01:00",
+      "category": "entry",
+      "action": "open_position",
+      "outcome": "executed",
+      "symbol": "WIN",
+      "addr": "seed-successful-entry",
+      "reason": "entry criteria satisfied",
+      "context": {
+        "strategy_mode": "aggressive",
+        "execution_mode": "paper",
+        "position_size_usd": 15.0
+      },
+      "snapshot": {
+        "kind": "entry",
+        "candidate": {
+          "symbol": "WIN",
+          "addr": "seed-successful-entry",
+          "score": 92.0
+        }
+      }
+    }
+  ],
+  "portfolio": [
+    {
+      "addr": "seed-successful-entry",
+      "symbol": "WIN",
+      "buy_price": 0.00031,
+      "max_price": 0.00039,
+      "amount_usd": 15.0,
+      "entry_liquidity": 7200.0,
+      "profit_locked_usd": 0.0,
+      "moonbag_active": 0,
+      "buy_time": "2026-05-10 10:01:05",
+      "current_price": 0.00037,
+      "price_source": "seed",
+      "price_updated_ts": 1778407320,
+      "entry_tx": "seed-buy-win",
+      "mode": "paper"
+    }
+  ],
+  "trade_history": [
+    {
+      "addr": "seed-successful-entry",
+      "symbol": "WIN",
+      "side": "buy",
+      "price": 0.00031,
+      "amount_usd": 15.0,
+      "pnl_pct": null,
+      "tx_hash": "seed-buy-win",
+      "metrics": {
+        "entry_reason": "fast_track_confirmed"
+      },
+      "time": "2026-05-10 10:01:05"
+    }
+  ]
+}

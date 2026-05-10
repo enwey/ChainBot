@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Mapping, Sequence
 
-from .models import RiskDecision, StrategyState
+from .models import CandidateScan, RiskDecision, StrategyState, TradeHistoryRow
 from .settings import Settings
 
 
 class RiskService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+
+    def _coerce_scan(self, scan: CandidateScan | Mapping[str, Any]) -> CandidateScan:
+        return scan if isinstance(scan, CandidateScan) else CandidateScan.from_mapping(scan)
+
+    def _coerce_trade_rows(
+        self, sells: Sequence[TradeHistoryRow | Mapping[str, Any]]
+    ) -> list[TradeHistoryRow]:
+        return [
+            row if isinstance(row, TradeHistoryRow) else TradeHistoryRow.from_mapping(row)
+            for row in sells
+        ]
 
     def default_strategy_state(self, reason: str, *, now_ts: int | None = None) -> StrategyState:
         return StrategyState(
@@ -27,20 +38,21 @@ class RiskService:
 
     def evaluate_strategy_state(
         self,
-        sells: list[dict[str, Any]],
+        sells: Sequence[TradeHistoryRow | Mapping[str, Any]],
         previous_state: StrategyState,
         *,
         now_ts: int | None = None,
     ) -> StrategyState:
         now = now_ts or int(time.time())
-        if len(sells) < 4:
+        trade_rows = self._coerce_trade_rows(sells)
+        if len(trade_rows) < 4:
             return self.default_strategy_state(
                 "insufficient sell sample, keep balanced mode",
                 now_ts=now,
             )
 
-        recent = sells[:12]
-        pnl_values = [float(row.get("pnl_pct") or 0.0) for row in recent]
+        recent = trade_rows[:12]
+        pnl_values = [float(row.pnl_pct or 0.0) for row in recent]
         wins = [pnl for pnl in pnl_values if pnl > 0]
         losses = [pnl for pnl in pnl_values if pnl <= 0]
         average_pnl = sum(pnl_values) / len(pnl_values)
@@ -61,7 +73,9 @@ class RiskService:
             "worst_trade_pct": worst_trade,
             "best_trade_pct": best_trade,
             "loss_streak": loss_streak,
-            "profit_factor": (sum(wins) / abs(sum(losses))) if losses and abs(sum(losses)) > 0 else (999.0 if wins else 0.0),
+            "profit_factor": (sum(wins) / abs(sum(losses)))
+            if losses and abs(sum(losses)) > 0
+            else (999.0 if wins else 0.0),
         }
 
         mode = "balanced"
@@ -136,32 +150,42 @@ class RiskService:
     def instant_probe_allowed(self, strategy_state: StrategyState) -> bool:
         return strategy_state.instant_probe_enabled
 
-    def instant_probe_ok(self, scan: dict[str, Any], strategy_state: StrategyState, *, has_position: bool) -> bool:
+    def instant_probe_ok(
+        self,
+        scan: CandidateScan | Mapping[str, Any],
+        strategy_state: StrategyState,
+        *,
+        has_position: bool,
+    ) -> bool:
+        scan_row = self._coerce_scan(scan)
         if not self.instant_probe_allowed(strategy_state):
             return False
         if has_position:
             return False
-        quality_score = float(scan.get("launch_quality_score") or 0.0)
+        quality_score = float(scan_row.get("launch_quality_score") or 0.0)
         if strategy_state.mode == "defensive" and quality_score < 70:
             return False
         if quality_score < 60:
             return False
-        if float(scan.get("score") or 0.0) < self.adaptive_min_score_to_buy(strategy_state):
+        if scan_row.score < self.adaptive_min_score_to_buy(strategy_state):
             return False
-        dev_buy = float(scan.get("dev_buy") or 0.0)
+        dev_buy = scan_row.dev_buy
         if not (self.settings.min_launch_dev_buy_sol <= dev_buy <= self.settings.max_dev_buy_sol):
             return False
-        liquidity = float(scan.get("liquidity") or 0.0)
-        if liquidity < self.settings.min_liquidity_usd or liquidity > self.settings.max_liquidity_usd:
+        liquidity = scan_row.liquidity
+        if (
+            liquidity < self.settings.min_liquidity_usd
+            or liquidity > self.settings.max_liquidity_usd
+        ):
             return False
-        if float(scan.get("bundle_risk_score") or 0.0) >= 0.85:
+        if scan_row.bundle_risk_score >= 0.85:
             return False
         return True
 
     def should_open_position(
         self,
-        scan: dict[str, Any],
-        wallet: dict[str, Any],
+        scan: CandidateScan | Mapping[str, Any],
+        wallet: Mapping[str, Any],
         strategy_state: StrategyState,
         *,
         has_position: bool,
@@ -170,24 +194,25 @@ class RiskService:
         now_ts: float | None = None,
     ) -> RiskDecision:
         now = now_ts or time.time()
+        scan_row = self._coerce_scan(scan)
         if strategy_state.is_cooldown_active(int(now)):
             return RiskDecision(False, "adaptive cooldown active")
         min_score = self.adaptive_min_score_to_buy(strategy_state)
-        if float(scan.get("score") or 0.0) < min_score:
+        if scan_row.score < min_score:
             return RiskDecision(False, f"score below adaptive threshold {min_score:.0f}")
-        dev_buy = float(scan.get("dev_buy") or 0.0)
+        dev_buy = scan_row.dev_buy
         if not (self.settings.min_dev_buy_sol <= dev_buy <= self.settings.max_dev_buy_sol):
             return RiskDecision(False, "developer buy outside target band")
         if has_position:
             return RiskDecision(False, "position already open")
         if open_position_count >= self.adaptive_max_open_positions(strategy_state):
             return RiskDecision(False, "portfolio already full")
-        liquidity = float(scan.get("liquidity") or 0.0)
+        liquidity = scan_row.liquidity
         if liquidity < self.settings.min_liquidity_usd:
             return RiskDecision(False, "liquidity too low")
         if liquidity > self.settings.max_liquidity_usd:
             return RiskDecision(False, "liquidity too mature")
-        created_ts = int(scan.get("created_ts") or 0)
+        created_ts = scan_row.created_ts
         if created_ts > 0:
             age_seconds = max(int(now) - created_ts, 0)
             if age_seconds > self.settings.max_token_age_seconds:
@@ -198,21 +223,29 @@ class RiskService:
             return RiskDecision(False, "insufficient balance")
         return RiskDecision(True, "ok")
 
-    def position_size_usd(self, scan: dict[str, Any], wallet: dict[str, Any], strategy_state: StrategyState) -> float:
+    def position_size_usd(
+        self,
+        scan: CandidateScan | Mapping[str, Any],
+        wallet: Mapping[str, Any],
+        strategy_state: StrategyState,
+    ) -> float:
+        scan_row = self._coerce_scan(scan)
         balance = float(wallet.get("current_balance", 0.0) or 0.0)
         base_size = self.settings.position_size_usd
-        score = float(scan.get("score") or 0.0)
+        score = scan_row.score
         if score >= 95:
             multiplier = 1.25
         elif score >= 88:
             multiplier = 1.0
         else:
             multiplier = 0.75
-        if scan.get("scalp_override") or float(scan.get("bundle_risk_score") or 0.0) >= 0.75:
+        if scan_row.get("scalp_override") or scan_row.bundle_risk_score >= 0.75:
             multiplier *= self.settings.scalp_risk_position_multiplier
         score_size = base_size * multiplier
         score_size *= self.adaptive_position_multiplier(strategy_state)
-        if float(scan.get("narrative_score") or 0.0) > 0:
+        if float(scan_row.get("narrative_score") or 0.0) > 0:
             score_size *= self.settings.narrative_position_multiplier
         wallet_cap = balance * self.settings.max_wallet_exposure_pct
-        return round(max(min(score_size, self.settings.max_position_size_usd, wallet_cap, balance), 0.0), 2)
+        return round(
+            max(min(score_size, self.settings.max_position_size_usd, wallet_cap, balance), 0.0), 2
+        )

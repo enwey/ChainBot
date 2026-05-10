@@ -215,6 +215,10 @@
             grid-template-rows: 0.78fr 1.22fr;
         }
 
+        .stack.analytics-main {
+            grid-template-rows: 0.9fr 1.1fr;
+        }
+
         .card {
             min-height: 0;
             display: flex;
@@ -700,6 +704,73 @@
             font-size: 12px;
         }
 
+        .operator-board {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            padding: 14px 18px 18px;
+            min-height: 0;
+        }
+
+        .operator-section {
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(10, 22, 39, 0.56);
+            overflow: hidden;
+        }
+
+        .operator-section-head {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(15, 35, 61, 0.5);
+        }
+
+        .operator-section-title {
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .operator-section-note {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .operator-list {
+            display: grid;
+            gap: 10px;
+            padding: 12px;
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        .operator-item {
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: rgba(8, 17, 31, 0.72);
+        }
+
+        .operator-item-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .operator-item-title {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .operator-item-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
         .sync-note {
             color: var(--muted);
             font-size: 11px;
@@ -729,8 +800,13 @@
             }
 
             .stack.radar-side,
-            .stack.analytics-side {
+            .stack.analytics-side,
+            .stack.analytics-main {
                 grid-template-rows: none;
+            }
+
+            .operator-board {
+                grid-template-columns: 1fr;
             }
 
             .decision-workbench {
@@ -755,6 +831,10 @@
             .feed-grid,
             .position-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .operator-board {
+                padding: 12px;
             }
 
             .table-header {
@@ -898,28 +978,62 @@
 
         <main id="panel-analytics" class="panel">
             <div class="layout-analytics">
-                <section class="card">
-                    <div class="card-header">
-                        <div>
-                            <div class="card-title">Performance Quality</div>
-                            <div class="card-caption">Realized, floating, and risk-adjusted performance summaries.</div>
+                <div class="stack analytics-main">
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Performance Quality</div>
+                                <div class="card-caption">Realized, floating, and risk-adjusted performance summaries.</div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="list">
-                        <div class="metric-section">
-                            <div class="metric-section-title">Realized</div>
-                            <div id="performance-realized" class="metric-grid"></div>
+                        <div class="list">
+                            <div class="metric-section">
+                                <div class="metric-section-title">Realized</div>
+                                <div id="performance-realized" class="metric-grid"></div>
+                            </div>
+                            <div class="metric-section" style="margin-top: 12px;">
+                                <div class="metric-section-title">Floating</div>
+                                <div id="performance-floating" class="metric-grid"></div>
+                            </div>
+                            <div class="metric-section" style="margin-top: 12px;">
+                                <div class="metric-section-title">Quality</div>
+                                <div id="performance-quality" class="metric-grid"></div>
+                            </div>
                         </div>
-                        <div class="metric-section" style="margin-top: 12px;">
-                            <div class="metric-section-title">Floating</div>
-                            <div id="performance-floating" class="metric-grid"></div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Operator Console</div>
+                                <div class="card-caption">Dependency state, worker errors, and manual intervention audit in one place.</div>
+                            </div>
                         </div>
-                        <div class="metric-section" style="margin-top: 12px;">
-                            <div class="metric-section-title">Quality</div>
-                            <div id="performance-quality" class="metric-grid"></div>
+                        <div class="operator-board">
+                            <section class="operator-section">
+                                <div class="operator-section-head">
+                                    <div class="operator-section-title">Dependency Health</div>
+                                    <div id="dependency-summary" class="operator-section-note">Loading dependency checks...</div>
+                                </div>
+                                <div id="dependency-list" class="operator-list"></div>
+                            </section>
+                            <section class="operator-section">
+                                <div class="operator-section-head">
+                                    <div class="operator-section-title">Worker Errors</div>
+                                    <div id="worker-summary" class="operator-section-note">Loading worker state...</div>
+                                </div>
+                                <div id="worker-list" class="operator-list"></div>
+                            </section>
+                            <section class="operator-section">
+                                <div class="operator-section-head">
+                                    <div class="operator-section-title">Manual Trade Audit</div>
+                                    <div id="manual-trade-summary" class="operator-section-note">Loading operator actions...</div>
+                                </div>
+                                <div id="manual-trade-list" class="operator-list"></div>
+                            </section>
                         </div>
-                    </div>
-                </section>
+                    </section>
+                </div>
 
                 <div class="stack analytics-side">
                     <section class="card">
@@ -1177,6 +1291,12 @@
             `;
         }
 
+        function renderOperatorItems(targetId, items, renderItem, emptyMessage) {
+            document.getElementById(targetId).innerHTML = items.length
+                ? items.map((item) => renderItem(item)).join("")
+                : `<div class="empty-state">${emptyMessage}</div>`;
+        }
+
         function renderDecisionDetail() {
             const detail = dashboardState.selectedDecisionDetail;
             const node = document.getElementById("decision-detail");
@@ -1188,6 +1308,7 @@
             const snapshot = detail.snapshot || {};
             const related = detail.related || {};
             const relatedTimeline = related.timeline || [];
+            const comparison = related.comparison || {};
             const currentPosition = related.current_position || null;
             const kind = String(snapshot.kind || detail.category || "decision").toLowerCase();
             const sections = [];
@@ -1197,6 +1318,19 @@
                 renderDetailKv("Trade Events", Number((related.trades || []).length).toFixed(0)),
                 renderDetailKv("Signal Events", Number((related.opportunities || []).length).toFixed(0)),
                 renderDetailKv("Open Position", currentPosition ? "active" : "none"),
+            ]));
+
+            sections.push(renderDetailSection("Replay Comparison", [
+                renderDetailKv("Executed Decisions", Number(comparison.executed_decision_count || 0).toFixed(0)),
+                renderDetailKv("Closed Trades", Number(comparison.closed_trade_count || 0).toFixed(0)),
+                renderDetailKv("Avg Signal Score", Number(comparison.avg_signal_score || 0).toFixed(1)),
+                renderDetailKv("Max Signal Score", Number(comparison.max_signal_score || 0).toFixed(1)),
+                renderDetailKv("Avg Signal Liquidity", money(comparison.avg_signal_liquidity_usd || 0, 0)),
+                renderDetailKv("Win Rate", formatPct(comparison.realized_win_rate || 0)),
+                renderDetailKv("Best Realized PnL", formatPct(comparison.best_realized_pnl_pct || 0)),
+                renderDetailKv("Worst Realized PnL", formatPct(comparison.worst_realized_pnl_pct || 0)),
+                renderDetailKv("Current Unrealized", formatPct(comparison.current_unrealized_pnl_pct || 0)),
+                renderDetailKv("Position Status", comparison.position_status || "-"),
             ]));
 
             if (kind === "entry") {
@@ -1386,18 +1520,32 @@
                     news,
                     decisions,
                     status,
+                    dependencies,
+                    workerErrors,
+                    manualTrades,
                 ] = await Promise.all([
-                    fetchJson(`/api/all?limit=200&t=${timestamp}`),
-                    fetchJson(`/api/opps?t=${timestamp}`),
+                    fetchJson(`/api/v1/all?limit=200&t=${timestamp}`),
+                    fetchJson(`/api/v1/opps?limit=20&t=${timestamp}`),
                     fetchJson(`/api/portfolio?t=${timestamp}`),
                     fetchJson(`/api/wallet?t=${timestamp}`),
                     fetchJson(`/api/performance?t=${timestamp}`),
-                    fetchJson(`/api/history?t=${timestamp}`),
+                    fetchJson(`/api/v1/history?limit=12&t=${timestamp}`),
                     fetchJson(`/api/watchlist?t=${timestamp}`),
-                    fetchJson(`/api/news?t=${timestamp}`),
+                    fetchJson(`/api/v1/news?limit=8&active_only=true&t=${timestamp}`),
                     fetchJson(`/api/v1/decisions?${decisionQuery}`),
                     fetchJson(`/api/status?t=${timestamp}`),
+                    fetchJson(`/api/v1/dependencies?t=${timestamp}`),
+                    fetchJson(`/api/v1/worker-errors?t=${timestamp}`),
+                    fetchJson(`/api/v1/manual-trades?limit=8&t=${timestamp}`),
                 ]);
+
+                const feedItems = feedRows.items || [];
+                const opportunityItems = opportunities.items || [];
+                const historyItems = history.items || [];
+                const newsItems = news.items || [];
+                const dependencyItems = dependencies.items || [];
+                const workerItems = workerErrors.items || [];
+                const manualTradeItems = manualTrades.items || [];
 
                 const currentBalance = Number(wallet.current_balance || 0);
                 const initialBalance = Number(wallet.initial_bal || 0);
@@ -1411,9 +1559,12 @@
                 setText("sync-time", new Date().toLocaleTimeString());
                 setText("sync-note", `Service ${status.service} · ${status.version}`);
                 setText("mode-pill", `Mode: ${status.mode}`);
-                setText("service-pill", status.live_enabled ? "Live trading armed" : "Paper trading safe");
+                setText(
+                    "service-pill",
+                    `${status.live_enabled ? "Live trading armed" : "Paper trading safe"} · ${Number(dependencies.summary?.degraded || 0)} degraded`,
+                );
 
-                document.getElementById("list-all").innerHTML = feedRows.length ? feedRows.map((item) => `
+                document.getElementById("list-all").innerHTML = feedItems.length ? feedItems.map((item) => `
                     <div class="table-row feed-grid">
                         <div class="tiny">${safeText(item.monitor_time || item.scan_time || "-")}</div>
                         <div class="tiny">${safeText(item.token_age || item.age || "-")}</div>
@@ -1431,7 +1582,7 @@
                     </div>
                 `).join("") : `<div class="empty-state">No scan rows yet.</div>`;
 
-                document.getElementById("list-opps").innerHTML = opportunities.length ? opportunities.map((item) => `
+                document.getElementById("list-opps").innerHTML = opportunityItems.length ? opportunityItems.map((item) => `
                     <div class="signal-card">
                         <div class="watch-top">
                             <div>
@@ -1449,7 +1600,7 @@
                     </div>
                 `).join("") : `<div class="empty-state">No current opportunity signals.</div>`;
 
-                document.getElementById("list-news").innerHTML = news.length ? news.map((item) => `
+                document.getElementById("list-news").innerHTML = newsItems.length ? newsItems.map((item) => `
                     <a href="${safeUrl(item.url)}" target="_blank" rel="noreferrer" style="text-decoration:none; color:inherit;">
                         <div class="news-card">
                             <div class="symbol">${safeText(item.title)}</div>
@@ -1536,7 +1687,7 @@
                     ["Open Positions", Number(performance.open_positions || 0)],
                 ]);
 
-                document.getElementById("history-list").innerHTML = history.length ? history.map((item) => `
+                document.getElementById("history-list").innerHTML = historyItems.length ? historyItems.map((item) => `
                     <div class="history-card">
                         <div class="history-head">
                             <div>
@@ -1551,6 +1702,65 @@
                         <div class="decision-reason">${safeText((item.metrics && (item.metrics.entry_reason || item.metrics.exit_reason)) ? (item.metrics.entry_reason || item.metrics.exit_reason) : "No structured reason attached.")}</div>
                     </div>
                 `).join("") : `<div class="empty-state">No trade history yet.</div>`;
+
+                setText(
+                    "dependency-summary",
+                    `${Number(dependencies.summary?.healthy || 0)} healthy · ${Number(dependencies.summary?.degraded || 0)} degraded · ${Number(dependencies.summary?.open_failures || 0)} open failures`,
+                );
+                renderOperatorItems(
+                    "dependency-list",
+                    dependencyItems,
+                    (item) => `
+                        <div class="operator-item">
+                            <div class="operator-item-head">
+                                <div class="operator-item-title">${safeText(item.name)}</div>
+                                <div class="chip ${item.status === "degraded" ? "bad" : "good"}">${safeText(item.status)}</div>
+                            </div>
+                            <div class="operator-item-meta">${safeText(item.kind)} · ${safeText(prettyJson(item.details || {}), "{}")}</div>
+                        </div>
+                    `,
+                    "No dependency health records yet.",
+                );
+
+                setText(
+                    "worker-summary",
+                    `${Number(workerErrors.summary?.workers_with_errors || 0)} workers with errors · ${Number(workerErrors.summary?.total_errors || 0)} total errors`,
+                );
+                renderOperatorItems(
+                    "worker-list",
+                    workerItems,
+                    (item) => `
+                        <div class="operator-item">
+                            <div class="operator-item-head">
+                                <div class="operator-item-title">${safeText(item.worker)}</div>
+                                <div class="chip bad">${safeText(item.state)}</div>
+                            </div>
+                            <div class="operator-item-meta">${safeText(item.last_error || "No error text")} | count ${Number(item.error_count || 0).toFixed(0)}</div>
+                            <div class="operator-item-meta">last seen ${safeText(item.last_seen_age || "-")} · last success ${safeText(item.last_success_age || "-")}</div>
+                        </div>
+                    `,
+                    "No worker errors right now.",
+                );
+
+                setText(
+                    "manual-trade-summary",
+                    `${Number(manualTrades.pagination?.total || 0)} audited actions`,
+                );
+                renderOperatorItems(
+                    "manual-trade-list",
+                    manualTradeItems,
+                    (item) => `
+                        <div class="operator-item">
+                            <div class="operator-item-head">
+                                <div class="operator-item-title">${safeText(item.symbol || item.addr)}</div>
+                                <div class="chip ${item.outcome === "executed" ? "good" : (item.outcome === "blocked" ? "bad" : "warn")}">${safeText(item.side)} · ${safeText(item.outcome)}</div>
+                            </div>
+                            <div class="operator-item-meta">${safeText(item.action_time || "-")} · ${escapeHtml(shortAddr(item.addr))} · ${money(item.amount_usd || 0)}</div>
+                            <div class="operator-item-meta">${safeText(item.reason || "No audit reason")}</div>
+                        </div>
+                    `,
+                    "No manual trade audit entries yet.",
+                );
 
                 const decisionItems = decisions.items || [];
                 const pagination = decisions.pagination || {};

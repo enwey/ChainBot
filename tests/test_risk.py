@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from investment_automation.models import StrategyState
+from investment_automation.models import CandidateScan, StrategyState, TradeHistoryRow
 from investment_automation.risk import RiskService
 from investment_automation.settings import Settings
 
@@ -69,16 +69,36 @@ class RiskServiceTests(unittest.TestCase):
         self.assertFalse(state.instant_probe_enabled)
         self.assertGreater(state.cooldown_until_ts, 1000)
 
+    def test_evaluate_strategy_state_accepts_trade_models(self) -> None:
+        sells = [
+            TradeHistoryRow.from_mapping({"pnl_pct": -0.25, "side": "sell"}),
+            TradeHistoryRow.from_mapping({"pnl_pct": -0.12, "side": "sell"}),
+            TradeHistoryRow.from_mapping({"pnl_pct": -0.08, "side": "sell"}),
+            TradeHistoryRow.from_mapping({"pnl_pct": -0.02, "side": "sell"}),
+        ]
+
+        state = self.service.evaluate_strategy_state(
+            sells,
+            StrategyState(max_open_positions=self.settings.max_open_positions, reason="seed"),
+            now_ts=1000,
+        )
+
+        self.assertEqual(state.mode, "cooldown")
+
     def test_should_open_position_accepts_valid_candidate(self) -> None:
-        strategy_state = StrategyState(max_open_positions=self.settings.max_open_positions, reason="seed")
+        strategy_state = StrategyState(
+            max_open_positions=self.settings.max_open_positions, reason="seed"
+        )
         decision = self.service.should_open_position(
-            scan={
-                "addr": "token-1",
-                "score": 92,
-                "dev_buy": 2.1,
-                "liquidity": 6000,
-                "created_ts": 995,
-            },
+            scan=CandidateScan.from_mapping(
+                {
+                    "addr": "token-1",
+                    "score": 92,
+                    "dev_buy": 2.1,
+                    "liquidity": 6000,
+                    "created_ts": 995,
+                }
+            ),
             wallet={"current_balance": 100},
             strategy_state=strategy_state,
             has_position=False,

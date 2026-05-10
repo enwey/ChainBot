@@ -86,7 +86,9 @@ class MaintenanceService:
         if self.settings.decision_audit_retention_days <= 0:
             return 0
         cutoff_ts = self._cutoff_timestamp(now_ts, self.settings.decision_audit_retention_days)
-        return self.database.delete_decision_audit_older_than(cutoff_ts, self._timestamp_text(cutoff_ts))
+        return self.database.delete_decision_audit_older_than(
+            cutoff_ts, self._timestamp_text(cutoff_ts)
+        )
 
     def _cutoff_timestamp(self, now_ts: int, retention_days: int) -> int:
         return max(0, now_ts - (retention_days * SECONDS_PER_DAY))

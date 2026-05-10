@@ -1,0 +1,106 @@
+{
+  "dataset_id": "emergency-stop",
+  "title": "Emergency stop liquidation after sharp drawdown",
+  "description": "Representative replay case where the emergency exit fires due to price collapse and liquidity deterioration.",
+  "wallet": {
+    "initial_bal": 300.0,
+    "current_balance": 287.3,
+    "buy_count": 1,
+    "buy_total": 15.0,
+    "sell_count": 1,
+    "sell_total": 12.3
+  },
+  "scan_logs": [
+    {
+      "scan_time": "2026-05-10 11:10:00",
+      "platform": "pumpfun",
+      "symbol": "STOP",
+      "age": "2m",
+      "addr": "seed-emergency-stop",
+      "price": 0.00028,
+      "liquidity": 4300.0,
+      "dev_buy": 1.4,
+      "progress": "52%",
+      "ratio": "3.4",
+      "score": 86.0,
+      "first_seen_ts": 1778411400,
+      "created_ts": 1778411280,
+      "holder_count_estimate": 30.0,
+      "top10_owner_pct": 0.29,
+      "top20_owner_pct": 0.39,
+      "largest_owner_pct": 0.11,
+      "bundle_risk_score": 0.28,
+      "socials": "{}",
+      "dex_url": "https://dexscreener.com/solana/seed-emergency-stop"
+    }
+  ],
+  "decision_audit": [
+    {
+      "decision_ts": 1778411580,
+      "decision_time": "2026-05-10 11:13:00",
+      "category": "exit",
+      "action": "close_position",
+      "outcome": "executed",
+      "symbol": "STOP",
+      "addr": "seed-emergency-stop",
+      "reason": "emergency stop loss",
+      "context": {
+        "strategy_mode": "balanced",
+        "execution_mode": "paper",
+        "pnl_pct": -0.18
+      },
+      "snapshot": {
+        "kind": "exit",
+        "decision": {
+          "exit_reason": "emergency_stop",
+          "pnl_pct": -0.18
+        },
+        "market_snapshot": {
+          "liquidity_ratio": 0.49
+        }
+      }
+    }
+  ],
+  "trade_history": [
+    {
+      "addr": "seed-emergency-stop",
+      "symbol": "STOP",
+      "side": "buy",
+      "price": 0.00034,
+      "amount_usd": 15.0,
+      "pnl_pct": null,
+      "tx_hash": "seed-buy-stop",
+      "metrics": {
+        "entry_reason": "watch_candidate_confirmed"
+      },
+      "time": "2026-05-10 11:11:00"
+    },
+    {
+      "addr": "seed-emergency-stop",
+      "symbol": "STOP",
+      "side": "sell",
+      "price": 0.00028,
+      "amount_usd": 15.0,
+      "pnl_pct": -0.18,
+      "tx_hash": "seed-sell-stop",
+      "metrics": {
+        "exit_reason": "emergency_stop",
+        "hold_seconds": 120
+      },
+      "time": "2026-05-10 11:13:00"
+    }
+  ],
+  "dependency_failures": [
+    {
+      "dependency": "pumpportal",
+      "operation": "stream_reconnect",
+      "failure_type": "disconnect",
+      "severity": "warning",
+      "message": "stream reconnected after price cascade",
+      "details": {
+        "attempt": 1
+      },
+      "failure_ts": 1778411540
+    }
+  ]
+}

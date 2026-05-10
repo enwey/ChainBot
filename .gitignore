@@ -3,7 +3,10 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/*.log
+data/runtime_safety.json
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 .venv/
 .mypy_cache/

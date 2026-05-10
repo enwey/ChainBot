@@ -73,15 +73,39 @@ class WatchlistServiceTests(unittest.TestCase):
     def test_trim_to_limit_removes_lowest_quality_candidates(self) -> None:
         watchlist = {
             "good-1": self.service.build_watch_candidate(
-                {"addr": "good-1", "symbol": "AIBOT", "score": 92, "dev_buy": 2.0, "liquidity": 5000, "price": 0.01, "socials": '{"twitter":"x"}'},
+                {
+                    "addr": "good-1",
+                    "symbol": "AIBOT",
+                    "score": 92,
+                    "dev_buy": 2.0,
+                    "liquidity": 5000,
+                    "price": 0.01,
+                    "socials": '{"twitter":"x"}',
+                },
                 now_ts=1000,
             ),
             "weak": self.service.build_watch_candidate(
-                {"addr": "weak", "symbol": "TEST", "score": 72, "dev_buy": 0.2, "liquidity": 1800, "price": 0.01, "socials": "{}"},
+                {
+                    "addr": "weak",
+                    "symbol": "TEST",
+                    "score": 72,
+                    "dev_buy": 0.2,
+                    "liquidity": 1800,
+                    "price": 0.01,
+                    "socials": "{}",
+                },
                 now_ts=1000,
             ),
             "good-2": self.service.build_watch_candidate(
-                {"addr": "good-2", "symbol": "GROK", "score": 90, "dev_buy": 1.8, "liquidity": 4700, "price": 0.01, "socials": '{"website":"x"}'},
+                {
+                    "addr": "good-2",
+                    "symbol": "GROK",
+                    "score": 90,
+                    "dev_buy": 1.8,
+                    "liquidity": 4700,
+                    "price": 0.01,
+                    "socials": '{"website":"x"}',
+                },
                 now_ts=1000,
             ),
         }

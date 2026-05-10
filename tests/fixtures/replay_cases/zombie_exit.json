@@ -1,0 +1,90 @@
+{
+  "dataset_id": "zombie-exit",
+  "title": "Zombie exit after volume dries up",
+  "description": "Representative replay case where a stale low-volume position is exited to free risk budget.",
+  "wallet": {
+    "initial_bal": 300.0,
+    "current_balance": 301.2,
+    "buy_count": 1,
+    "buy_total": 15.0,
+    "sell_count": 1,
+    "sell_total": 16.2
+  },
+  "scan_logs": [
+    {
+      "scan_time": "2026-05-10 12:00:00",
+      "platform": "pumpfun",
+      "symbol": "ZMB",
+      "age": "12m",
+      "addr": "seed-zombie-exit",
+      "price": 0.00047,
+      "liquidity": 5100.0,
+      "dev_buy": 1.1,
+      "progress": "43%",
+      "ratio": "2.9",
+      "score": 84.0,
+      "first_seen_ts": 1778414400,
+      "created_ts": 1778413680,
+      "holder_count_estimate": 44.0,
+      "top10_owner_pct": 0.27,
+      "top20_owner_pct": 0.38,
+      "largest_owner_pct": 0.09,
+      "bundle_risk_score": 0.25,
+      "socials": "{}",
+      "dex_url": "https://dexscreener.com/solana/seed-zombie-exit"
+    }
+  ],
+  "decision_audit": [
+    {
+      "decision_ts": 1778415120,
+      "decision_time": "2026-05-10 12:12:00",
+      "category": "exit",
+      "action": "close_position",
+      "outcome": "executed",
+      "symbol": "ZMB",
+      "addr": "seed-zombie-exit",
+      "reason": "zombie exit after non-live volume drought",
+      "context": {
+        "strategy_mode": "balanced",
+        "execution_mode": "paper",
+        "pnl_pct": 0.08
+      },
+      "snapshot": {
+        "kind": "exit",
+        "decision": {
+          "exit_reason": "zombie_exit",
+          "pnl_pct": 0.08
+        }
+      }
+    }
+  ],
+  "trade_history": [
+    {
+      "addr": "seed-zombie-exit",
+      "symbol": "ZMB",
+      "side": "buy",
+      "price": 0.00044,
+      "amount_usd": 15.0,
+      "pnl_pct": null,
+      "tx_hash": "seed-buy-zmb",
+      "metrics": {
+        "entry_reason": "observation_confirmed"
+      },
+      "time": "2026-05-10 12:01:00"
+    },
+    {
+      "addr": "seed-zombie-exit",
+      "symbol": "ZMB",
+      "side": "sell",
+      "price": 0.00047,
+      "amount_usd": 15.0,
+      "pnl_pct": 0.08,
+      "tx_hash": "seed-sell-zmb",
+      "metrics": {
+        "exit_reason": "zombie_exit",
+        "hold_seconds": 660
+      },
+      "time": "2026-05-10 12:12:00"
+    }
+  ]
+}

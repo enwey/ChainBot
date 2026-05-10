@@ -5,8 +5,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol
 
 
 class DecisionAuditStore(Protocol):
-    def record_decision_audit(self, payload: dict[str, Any]) -> None:
-        ...
+    def record_decision_audit(self, payload: dict[str, Any]) -> None: ...
 
 
 class DecisionAuditService:

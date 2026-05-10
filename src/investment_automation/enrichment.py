@@ -36,7 +36,10 @@ class EnrichmentService:
         if not candidate:
             return
         now = now_ts or int(time.time())
-        if now - int(candidate.get("holder_refreshed_ts", 0)) < self.settings.holder_refresh_seconds:
+        if (
+            now - int(candidate.get("holder_refreshed_ts", 0))
+            < self.settings.holder_refresh_seconds
+        ):
             return
         holder_metrics = await asyncio.to_thread(self.market_data.fetch_holder_metrics, addr)
         if not holder_metrics:
@@ -55,7 +58,9 @@ class EnrichmentService:
     ) -> Optional[dict[str, Any]]:
         acquired = await asyncio.to_thread(self.holder_enrichment_semaphore.acquire)
         try:
-            holder_metrics = await asyncio.to_thread(self.market_data.fetch_holder_metrics, scan["addr"])
+            holder_metrics = await asyncio.to_thread(
+                self.market_data.fetch_holder_metrics, scan["addr"]
+            )
         finally:
             if acquired:
                 self.holder_enrichment_semaphore.release()
@@ -74,7 +79,9 @@ class EnrichmentService:
         metadata = self.market_data.get_token_metadata(str(scan.get("addr") or ""))
         merged = {**metadata, **{key: value for key, value in source.items() if value}}
         symbol = str(scan.get("symbol") or "").strip()
-        next_symbol = str(merged.get("symbol") or merged.get("ticker") or merged.get("name") or "").strip()
+        next_symbol = str(
+            merged.get("symbol") or merged.get("ticker") or merged.get("name") or ""
+        ).strip()
         if next_symbol and (not symbol or symbol.upper() == "UNKNOWN"):
             scan["symbol"] = next_symbol
 

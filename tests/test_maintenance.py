@@ -83,7 +83,9 @@ class MaintenanceTests(unittest.TestCase):
             }
         )
 
-    def record_opportunity(self, database: Database, *, addr: str, symbol: str, scan_ts: int) -> None:
+    def record_opportunity(
+        self, database: Database, *, addr: str, symbol: str, scan_ts: int
+    ) -> None:
         database.record_opportunity(
             {
                 "type": "watch",
@@ -129,7 +131,9 @@ class MaintenanceTests(unittest.TestCase):
             ]
         )
 
-    def record_decision_audit(self, database: Database, *, addr: str, symbol: str, decision_ts: int) -> None:
+    def record_decision_audit(
+        self, database: Database, *, addr: str, symbol: str, decision_ts: int
+    ) -> None:
         database.record_decision_audit(
             {
                 "decision_ts": decision_ts,
@@ -153,10 +157,18 @@ class MaintenanceTests(unittest.TestCase):
             database = Database(settings)
             database.initialize()
 
-            self.record_scan(database, addr="stale-scan", symbol="OLD", seen_ts=now_ts - (10 * 86400))
-            self.record_scan(database, addr="fresh-scan", symbol="NEW", seen_ts=now_ts - (2 * 86400))
-            self.record_opportunity(database, addr="stale-opp", symbol="OLD", scan_ts=now_ts - (20 * 86400))
-            self.record_opportunity(database, addr="fresh-opp", symbol="NEW", scan_ts=now_ts - (2 * 86400))
+            self.record_scan(
+                database, addr="stale-scan", symbol="OLD", seen_ts=now_ts - (10 * 86400)
+            )
+            self.record_scan(
+                database, addr="fresh-scan", symbol="NEW", seen_ts=now_ts - (2 * 86400)
+            )
+            self.record_opportunity(
+                database, addr="stale-opp", symbol="OLD", scan_ts=now_ts - (20 * 86400)
+            )
+            self.record_opportunity(
+                database, addr="fresh-opp", symbol="NEW", scan_ts=now_ts - (2 * 86400)
+            )
             self.record_news_event(
                 database,
                 event_id="stale-news",
@@ -171,19 +183,33 @@ class MaintenanceTests(unittest.TestCase):
                 published_ts=now_ts - (2 * 86400),
                 active_until_ts=now_ts - 86400,
             )
-            self.record_decision_audit(database, addr="stale-decision", symbol="OLD", decision_ts=now_ts - (35 * 86400))
-            self.record_decision_audit(database, addr="fresh-decision", symbol="NEW", decision_ts=now_ts - (5 * 86400))
+            self.record_decision_audit(
+                database, addr="stale-decision", symbol="OLD", decision_ts=now_ts - (35 * 86400)
+            )
+            self.record_decision_audit(
+                database, addr="fresh-decision", symbol="NEW", decision_ts=now_ts - (5 * 86400)
+            )
 
-            result = MaintenanceService(settings, database, clock=lambda: now_ts).run_startup_tasks()
+            result = MaintenanceService(
+                settings, database, clock=lambda: now_ts
+            ).run_startup_tasks()
             self.assertEqual(result.scan_logs_deleted, 1)
             self.assertEqual(result.opportunities_deleted, 1)
             self.assertEqual(result.news_events_deleted, 1)
             self.assertEqual(result.decision_audits_deleted, 1)
             self.assertEqual(result.total_deleted, 4)
-            self.assertEqual([row["addr"] for row in database.get_scan_logs(limit=10)], ["fresh-scan"])
-            self.assertEqual([row["addr"] for row in database.get_opportunities(limit=10)], ["fresh-opp"])
-            self.assertEqual([row["event_id"] for row in database.get_news_events(limit=10)], ["fresh-news"])
-            self.assertEqual([row["addr"] for row in database.get_decision_audit(limit=10)], ["fresh-decision"])
+            self.assertEqual(
+                [row["addr"] for row in database.get_scan_logs(limit=10)], ["fresh-scan"]
+            )
+            self.assertEqual(
+                [row["addr"] for row in database.get_opportunities(limit=10)], ["fresh-opp"]
+            )
+            self.assertEqual(
+                [row["event_id"] for row in database.get_news_events(limit=10)], ["fresh-news"]
+            )
+            self.assertEqual(
+                [row["addr"] for row in database.get_decision_audit(limit=10)], ["fresh-decision"]
+            )
 
     def test_bootstrap_logs_and_continues_when_maintenance_fails(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -194,16 +220,24 @@ class MaintenanceTests(unittest.TestCase):
             maintenance = Mock()
             maintenance.run_startup_tasks.side_effect = RuntimeError("boom")
 
-            with patch("investment_automation.app.Database", return_value=database), patch(
-                "investment_automation.app.MaintenanceService",
-                return_value=maintenance,
-            ), patch("investment_automation.app.MarketDataClient", return_value=Mock()), patch(
-                "investment_automation.app.NewsClient",
-                return_value=Mock(),
-            ), patch("investment_automation.app.TradeExecutor", return_value=Mock()), patch(
-                "investment_automation.app.TradingEngine",
-                return_value=Mock(),
-            ), patch("investment_automation.app.create_server", return_value=Mock()):
+            with (
+                patch("investment_automation.app.Database", return_value=database),
+                patch(
+                    "investment_automation.app.MaintenanceService",
+                    return_value=maintenance,
+                ),
+                patch("investment_automation.app.MarketDataClient", return_value=Mock()),
+                patch(
+                    "investment_automation.app.NewsClient",
+                    return_value=Mock(),
+                ),
+                patch("investment_automation.app.TradeExecutor", return_value=Mock()),
+                patch(
+                    "investment_automation.app.TradingEngine",
+                    return_value=Mock(),
+                ),
+                patch("investment_automation.app.create_server", return_value=Mock()),
+            ):
                 app = Application(settings)
                 with self.assertLogs("investment_automation.app", level="ERROR") as logs:
                     app.bootstrap()

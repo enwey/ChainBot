@@ -17,17 +17,24 @@ class NarrativeService:
             return scan
 
         text = self._overlay_text(payload)
-        narrative_hits = [word for word in self.settings.narrative_keywords if word and word in text]
+        narrative_hits = [
+            word for word in self.settings.narrative_keywords if word and word in text
+        ]
         kol_hits = [word for word in self.settings.trusted_kol_keywords if word and word in text]
         news_matches = self.match_news_events(text)
 
-        news_bonus = min(sum(float(match["bonus"]) for match in news_matches), self.settings.news_max_bonus)
+        news_bonus = min(
+            sum(float(match["bonus"]) for match in news_matches), self.settings.news_max_bonus
+        )
         keyword_bonus = min(
             len(narrative_hits) * self.settings.narrative_score_bonus
             + len(kol_hits) * self.settings.trusted_kol_score_bonus,
             self.settings.narrative_max_bonus,
         )
-        bonus = min(keyword_bonus + news_bonus, self.settings.narrative_max_bonus + self.settings.news_max_bonus)
+        bonus = min(
+            keyword_bonus + news_bonus,
+            self.settings.narrative_max_bonus + self.settings.news_max_bonus,
+        )
         if bonus <= 0:
             scan["narrative_score"] = 0.0
             scan["narrative_tags"] = []

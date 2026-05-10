@@ -32,6 +32,11 @@ class SettingsTests(unittest.TestCase):
             "MAX_WALLET_EXPOSURE_PCT": "0.12",
             "MIN_SCORE_TO_BUY": "85",
             "MIN_WATCH_SCORE": "72",
+            "MAX_DAILY_LOSS_USD": "40",
+            "MAX_CONSECUTIVE_DEPENDENCY_FAILURES": "4",
+            "DEPENDENCY_FAILURE_WINDOW_SECONDS": "300",
+            "ABNORMAL_EXIT_COOLDOWN_SECONDS": "300",
+            "ABNORMAL_EXIT_THRESHOLD": "2",
             "MIN_DEV_BUY_SOL": "1.0",
             "MAX_DEV_BUY_SOL": "4.0",
             "MIN_LIQUIDITY_USD": "2500",
@@ -83,6 +88,15 @@ class SettingsTests(unittest.TestCase):
     def test_validate_rejects_public_bind_without_admin_token(self) -> None:
         env = self.base_env()
         env["APP_HOST"] = "0.0.0.0"
+
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings.from_env()
+            with self.assertRaises(SettingsValidationError):
+                settings.validate()
+
+    def test_validate_rejects_non_positive_daily_loss_limit(self) -> None:
+        env = self.base_env()
+        env["MAX_DAILY_LOSS_USD"] = "0"
 
         with patch.dict(os.environ, env, clear=True):
             settings = Settings.from_env()

@@ -16,6 +16,13 @@ dependencies = [
   "solders>=0.21.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "pytest>=8.3.5",
+  "ruff>=0.11.9",
+]
+
 [project.scripts]
 investment-automation = "investment_automation.app:main"
 
@@ -24,3 +31,14 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+ignore = ["E402", "E501"]
+select = ["E", "F", "I"]

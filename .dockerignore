@@ -1,0 +1,12 @@
+.git
+.github
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+build
+dist
+data
+*.db
+*.db-shm
+*.db-wal

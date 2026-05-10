@@ -1,0 +1,109 @@
+{
+  "dataset_id": "partial-moonbag-exit",
+  "title": "Partial moonbag exit after profit lock",
+  "description": "Representative exit replay case where the strategy sells most of the position and leaves a reduced moonbag.",
+  "wallet": {
+    "initial_bal": 300.0,
+    "current_balance": 296.0,
+    "buy_count": 1,
+    "buy_total": 15.0,
+    "sell_count": 1,
+    "sell_total": 11.5
+  },
+  "scan_logs": [
+    {
+      "scan_time": "2026-05-10 10:40:00",
+      "platform": "pumpfun",
+      "symbol": "MOON",
+      "age": "4m",
+      "addr": "seed-partial-moonbag",
+      "price": 0.00052,
+      "liquidity": 9800.0,
+      "dev_buy": 2.0,
+      "progress": "81%",
+      "ratio": "6.1",
+      "score": 95.0,
+      "first_seen_ts": 1778409600,
+      "created_ts": 1778409360,
+      "holder_count_estimate": 61.0,
+      "top10_owner_pct": 0.19,
+      "top20_owner_pct": 0.29,
+      "largest_owner_pct": 0.06,
+      "bundle_risk_score": 0.12,
+      "socials": "{}",
+      "dex_url": "https://dexscreener.com/solana/seed-partial-moonbag"
+    }
+  ],
+  "decision_audit": [
+    {
+      "decision_ts": 1778409960,
+      "decision_time": "2026-05-10 10:46:00",
+      "category": "exit",
+      "action": "reduce_position",
+      "outcome": "executed",
+      "symbol": "MOON",
+      "addr": "seed-partial-moonbag",
+      "reason": "profit lock and keep moonbag",
+      "context": {
+        "strategy_mode": "aggressive",
+        "execution_mode": "paper",
+        "pnl_pct": 0.34
+      },
+      "snapshot": {
+        "kind": "exit",
+        "decision": {
+          "exit_reason": "profit_lock_moonbag",
+          "sell_fraction": 0.75,
+          "pnl_pct": 0.34
+        }
+      }
+    }
+  ],
+  "portfolio": [
+    {
+      "addr": "seed-partial-moonbag",
+      "symbol": "MOON",
+      "buy_price": 0.00039,
+      "max_price": 0.00057,
+      "amount_usd": 3.75,
+      "entry_liquidity": 7600.0,
+      "profit_locked_usd": 3.9,
+      "moonbag_active": 1,
+      "buy_time": "2026-05-10 10:41:00",
+      "current_price": 0.00052,
+      "price_source": "seed",
+      "price_updated_ts": 1778409960,
+      "entry_tx": "seed-buy-moon",
+      "mode": "paper"
+    }
+  ],
+  "trade_history": [
+    {
+      "addr": "seed-partial-moonbag",
+      "symbol": "MOON",
+      "side": "buy",
+      "price": 0.00039,
+      "amount_usd": 15.0,
+      "pnl_pct": null,
+      "tx_hash": "seed-buy-moon",
+      "metrics": {
+        "entry_reason": "launch_quality_confirmed"
+      },
+      "time": "2026-05-10 10:41:00"
+    },
+    {
+      "addr": "seed-partial-moonbag",
+      "symbol": "MOON",
+      "side": "sell",
+      "price": 0.00052,
+      "amount_usd": 11.25,
+      "pnl_pct": 0.34,
+      "tx_hash": "seed-sell-moon",
+      "metrics": {
+        "exit_reason": "profit_lock_moonbag",
+        "hold_seconds": 300
+      },
+      "time": "2026-05-10 10:46:00"
+    }
+  ]
+}

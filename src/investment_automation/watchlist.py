@@ -13,7 +13,9 @@ class WatchlistService:
         self.settings = settings
         self.scorer = scorer
 
-    def get_watchlist_status(self, watchlist: dict[str, dict[str, Any]], *, now_ts: Optional[int] = None) -> list[dict[str, Any]]:
+    def get_watchlist_status(
+        self, watchlist: dict[str, dict[str, Any]], *, now_ts: Optional[int] = None
+    ) -> list[dict[str, Any]]:
         now = now_ts or int(time.time())
         items: list[dict[str, Any]] = []
         for addr, candidate in list(watchlist.items()):
@@ -54,9 +56,19 @@ class WatchlistService:
                     "bundle_risk_label": "待查"
                     if float(scan.get("holder_count_estimate") or 0.0) <= 0
                     else self.scorer.bundle_risk_label(float(scan.get("bundle_risk_score") or 0.0)),
-                    "last_update_ts": int(candidate.get("last_update_ts", candidate["watch_started_ts"])),
-                    "last_update_age": self.format_duration(max(now - int(candidate.get("last_update_ts", candidate["watch_started_ts"])), 0)),
-                    "last_snapshot_age": self.format_duration(max(now - int(candidate.get("last_snapshot_ts", 0)), 0))
+                    "last_update_ts": int(
+                        candidate.get("last_update_ts", candidate["watch_started_ts"])
+                    ),
+                    "last_update_age": self.format_duration(
+                        max(
+                            now
+                            - int(candidate.get("last_update_ts", candidate["watch_started_ts"])),
+                            0,
+                        )
+                    ),
+                    "last_snapshot_age": self.format_duration(
+                        max(now - int(candidate.get("last_snapshot_ts", 0)), 0)
+                    )
                     if int(candidate.get("last_snapshot_ts", 0)) > 0
                     else "-",
                     "last_snapshot_source": candidate.get("last_snapshot_source", "-"),
@@ -74,16 +86,27 @@ class WatchlistService:
         items.sort(key=lambda item: item["watch_seconds"], reverse=True)
         return items
 
-    def should_watch(self, scan: dict[str, Any], *, now_ts: Optional[int] = None) -> tuple[bool, str]:
+    def should_watch(
+        self, scan: dict[str, Any], *, now_ts: Optional[int] = None
+    ) -> tuple[bool, str]:
         quality_score, signals = self.scorer.launch_quality(scan)
         scan["launch_quality_score"] = quality_score
         scan["launch_signals"] = signals
         if not self.scorer.fast_track_launch(scan, quality_score, signals):
-            if quality_score < self.settings.min_launch_quality_score or len(signals) < self.settings.min_launch_signal_count:
-                return False, f"low launch quality {quality_score:.0f}: {','.join(signals) or 'no strong signal'}"
+            if (
+                quality_score < self.settings.min_launch_quality_score
+                or len(signals) < self.settings.min_launch_signal_count
+            ):
+                return (
+                    False,
+                    f"low launch quality {quality_score:.0f}: {','.join(signals) or 'no strong signal'}",
+                )
         if float(scan.get("score") or 0.0) < self.settings.min_watch_score:
             return False, "watch score too low"
-        if float(scan.get("dev_buy") or 0.0) < 0.05 and float(scan.get("narrative_score") or 0.0) <= 0:
+        if (
+            float(scan.get("dev_buy") or 0.0) < 0.05
+            and float(scan.get("narrative_score") or 0.0) <= 0
+        ):
             return False, "no launch buy pressure"
         liquidity = float(scan.get("liquidity") or 0.0)
         if liquidity < self.settings.min_watch_liquidity_usd:
@@ -124,7 +147,9 @@ class WatchlistService:
             "samples": samples,
         }
 
-    def trim_to_limit(self, watchlist: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any], str]]:
+    def trim_to_limit(
+        self, watchlist: dict[str, dict[str, Any]]
+    ) -> list[tuple[str, dict[str, Any], str]]:
         max_size = max(int(self.settings.max_watchlist_size), 0)
         overflow = len(watchlist) - max_size
         if overflow <= 0:
@@ -201,15 +226,17 @@ class WatchlistService:
             return f"{age_seconds // 3600}h"
         return f"{age_seconds // 86400}d"
 
-    def watch_status_reason(self, elapsed: int, price_change_pct: float, drawdown_pct: float, liquidity_ratio: float) -> str:
+    def watch_status_reason(
+        self, elapsed: int, price_change_pct: float, drawdown_pct: float, liquidity_ratio: float
+    ) -> str:
         if elapsed < self.settings.min_observation_seconds:
             return f"冷静期中，还需 {self.settings.min_observation_seconds - elapsed}s"
         if drawdown_pct > self.settings.max_observation_drawdown_pct:
-            return f"回撤过大 {drawdown_pct*100:.1f}%"
+            return f"回撤过大 {drawdown_pct * 100:.1f}%"
         if liquidity_ratio < self.settings.min_observation_liquidity_ratio:
             return f"流动性偏弱 {liquidity_ratio:.2f}x"
         if price_change_pct < self.settings.min_observation_price_change_pct:
-            return f"动量不足 {price_change_pct*100:.1f}%"
+            return f"动量不足 {price_change_pct * 100:.1f}%"
         return "满足确认条件，等待买入窗口"
 
     def watch_status_reason_with_snapshot(

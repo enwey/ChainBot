@@ -6,18 +6,23 @@ import time
 from copy import deepcopy
 from typing import Optional, Tuple
 
-from .decision_audit import DecisionAuditService
 from .db import Database
+from .decision_audit import DecisionAuditService
 from .enrichment import EnrichmentService
 from .execution import TradeExecutor
 from .market_data import MarketDataClient, build_scan_record
-from .models import StrategyState
+from .models import CandidateScan, PortfolioPosition, StrategyState
 from .narrative import NarrativeService
 from .news import NewsClient
 from .observation import ObservationService
 from .opportunity import OpportunityService
 from .position import PositionService
 from .risk import RiskService
+from .runtime_safety import (
+    DependencyFailureRecord,
+    RuntimeSafetyManager,
+    RuntimeSafetyShutdown,
+)
 from .scoring import SignalScorer
 from .settings import Settings
 from .watchlist import WatchlistService
@@ -33,12 +38,14 @@ class TradingEngine:
         market_data: MarketDataClient,
         executor: TradeExecutor,
         news_client: Optional[NewsClient] = None,
+        runtime_safety: RuntimeSafetyManager | None = None,
     ) -> None:
         self.settings = settings
         self.database = database
         self.market_data = market_data
         self.executor = executor
         self.news_client = news_client
+        self.runtime_safety = runtime_safety or RuntimeSafetyManager(settings)
         self.risk_service = RiskService(settings)
         self.signal_scorer = SignalScorer(settings)
         self.decision_audit_service = DecisionAuditService(database)
@@ -47,7 +54,9 @@ class TradingEngine:
         self.observation_service = ObservationService(settings, self.signal_scorer)
         self.opportunity_service = OpportunityService(database)
         self.watchlist_service = WatchlistService(settings, self.signal_scorer)
-        self.position_service = PositionService(settings, self.signal_scorer, self.watchlist_service, database, market_data)
+        self.position_service = PositionService(
+            settings, self.signal_scorer, self.watchlist_service, database, market_data
+        )
         self.started_at = int(time.time())
         self.last_buy_ts = 0.0
         self.strategy_state = StrategyState.from_dict(
@@ -87,10 +96,14 @@ class TradingEngine:
         for name, status in self.worker_status.items():
             workers[name] = {
                 **status,
-                "last_seen_age": self._format_duration(max(now - int(status.get("last_seen_ts") or 0), 0))
+                "last_seen_age": self._format_duration(
+                    max(now - int(status.get("last_seen_ts") or 0), 0)
+                )
                 if int(status.get("last_seen_ts") or 0) > 0
                 else "-",
-                "last_success_age": self._format_duration(max(now - int(status.get("last_success_ts") or 0), 0))
+                "last_success_age": self._format_duration(
+                    max(now - int(status.get("last_success_ts") or 0), 0)
+                )
                 if int(status.get("last_success_ts") or 0) > 0
                 else "-",
             }
@@ -101,6 +114,7 @@ class TradingEngine:
             "watchlist_size": len(self.watchlist),
             "radar_pool_size": len(self.radar_pool),
             "open_positions": self.database.open_position_count(),
+            "runtime_safety": self.runtime_safety.runtime_status(),
             "workers": workers,
         }
 
@@ -108,6 +122,7 @@ class TradingEngine:
         status = self.worker_status.setdefault(name, {})
         status["state"] = "running"
         status["last_seen_ts"] = int(time.time())
+        self.runtime_safety.heartbeat()
 
     def _mark_worker_success(self, name: str) -> None:
         status = self.worker_status.setdefault(name, {})
@@ -116,6 +131,9 @@ class TradingEngine:
         status["iterations"] = int(status.get("iterations", 0)) + 1
         status["last_seen_ts"] = now
         status["last_success_ts"] = now
+        self.runtime_safety.record_dependency_success("runtime", name, "worker_loop")
+        self.database.resolve_dependency_failures(name, operation="worker_loop", resolved_ts=now)
+        self.runtime_safety.heartbeat(now_ts=now)
 
     def _mark_worker_error(self, name: str, exc: Exception) -> None:
         status = self.worker_status.setdefault(name, {})
@@ -125,17 +143,46 @@ class TradingEngine:
         status["last_seen_ts"] = now
         status["last_error_ts"] = now
         status["last_error"] = str(exc)
+        self.runtime_safety.record_dependency_failure(
+            DependencyFailureRecord(
+                component="runtime",
+                dependency=name,
+                operation="worker_loop",
+                message=str(exc),
+                occurred_ts=now,
+                failure_class=exc.__class__.__name__,
+                metadata={},
+            )
+        )
+        self.database.record_dependency_failure(
+            {
+                "dependency": name,
+                "operation": "worker_loop",
+                "failure_type": exc.__class__.__name__,
+                "severity": "error",
+                "message": str(exc),
+                "details": {"component": "runtime"},
+                "failure_ts": now,
+            }
+        )
 
     async def run(self) -> None:
-        await asyncio.gather(
-            self.monitor_news_events(),
-            self.monitor_strategy_optimizer(),
-            self.monitor_new_tokens(),
-            self.monitor_scan_holder_backfill(),
-            self.monitor_radar_pool(),
-            self.monitor_watchlist(),
-            self.monitor_open_positions(),
-        )
+        tasks = [
+            asyncio.create_task(self.monitor_news_events(), name="news"),
+            asyncio.create_task(self.monitor_strategy_optimizer(), name="strategy"),
+            asyncio.create_task(self.monitor_new_tokens(), name="new_tokens"),
+            asyncio.create_task(self.monitor_scan_holder_backfill(), name="holder_backfill"),
+            asyncio.create_task(self.monitor_radar_pool(), name="radar"),
+            asyncio.create_task(self.monitor_watchlist(), name="watchlist"),
+            asyncio.create_task(self.monitor_open_positions(), name="positions"),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except RuntimeSafetyShutdown:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     async def monitor_news_events(self) -> None:
         while True:
@@ -153,6 +200,7 @@ class TradingEngine:
                 logger.exception("Failed to refresh news events")
             else:
                 self._mark_worker_success("news")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(self.settings.news_poll_seconds)
 
     async def monitor_strategy_optimizer(self) -> None:
@@ -167,6 +215,7 @@ class TradingEngine:
                 logger.exception("Failed to optimize strategy state")
             else:
                 self._mark_worker_success("strategy")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(30)
 
     async def monitor_new_tokens(self) -> None:
@@ -174,6 +223,7 @@ class TradingEngine:
             self._mark_worker_running("new_tokens")
             try:
                 async for payload in self.market_data.subscribe_new_tokens():
+                    self.runtime_safety.ensure_runtime_active()
                     self._mark_worker_running("new_tokens")
                     try:
                         scan = build_scan_record(payload, self.settings.sol_price_usd)
@@ -198,6 +248,7 @@ class TradingEngine:
             except Exception as exc:
                 self._mark_worker_error("new_tokens", exc)
                 logger.exception("Token monitor stream failed")
+                self.runtime_safety.ensure_runtime_active()
                 await asyncio.sleep(self.settings.monitor_poll_seconds)
 
     async def monitor_scan_holder_backfill(self) -> None:
@@ -209,14 +260,21 @@ class TradingEngine:
                     max_age_seconds=max(self.settings.max_token_age_seconds * 2, 420),
                 )
                 for scan in pending:
-                    holder_metrics = await asyncio.to_thread(self.market_data.fetch_holder_metrics, scan["addr"])
-                    if not holder_metrics or float(holder_metrics.get("holder_count_estimate") or 0.0) <= 0:
+                    holder_metrics = await asyncio.to_thread(
+                        self.market_data.fetch_holder_metrics, scan["addr"]
+                    )
+                    if (
+                        not holder_metrics
+                        or float(holder_metrics.get("holder_count_estimate") or 0.0) <= 0
+                    ):
                         continue
                     scan.update(holder_metrics)
                     bundle_risk_score = self._bundle_risk_score(scan)
                     scan["bundle_risk_score"] = bundle_risk_score
                     score = self._market_quality_score(scan)
-                    self.database.update_scan_holder_metrics(scan["addr"], holder_metrics, score, bundle_risk_score)
+                    self.database.update_scan_holder_metrics(
+                        scan["addr"], holder_metrics, score, bundle_risk_score
+                    )
                     logger.info(
                         "Backfilled holder metrics for %s: holders=%s top10=%.1f%% risk=%s",
                         scan.get("symbol", "-"),
@@ -231,6 +289,7 @@ class TradingEngine:
                 logger.exception("Failed to backfill scan holder metrics")
             else:
                 self._mark_worker_success("holder_backfill")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(6)
 
     async def monitor_radar_pool(self) -> None:
@@ -239,13 +298,21 @@ class TradingEngine:
             try:
                 self._prune_radar_pool()
                 await self._sync_realtime_tokens()
-                addresses = [addr for addr in self.radar_pool.keys() if addr not in self.watchlist and not self.database.has_position(addr)]
+                addresses = [
+                    addr
+                    for addr in self.radar_pool.keys()
+                    if addr not in self.watchlist and not self.database.has_position(addr)
+                ]
                 await self._refresh_unknown_metadata()
                 if addresses:
                     for addr in addresses:
-                        snapshot = self.market_data.get_realtime_snapshot(addr, max_age_seconds=max(self.settings.radar_poll_seconds * 3, 6))
+                        snapshot = self.market_data.get_realtime_snapshot(
+                            addr, max_age_seconds=max(self.settings.radar_poll_seconds * 3, 6)
+                        )
                         if snapshot:
-                            await self._refresh_candidate_holder_metrics(addr, self.radar_pool.get(addr))
+                            await self._refresh_candidate_holder_metrics(
+                                addr, self.radar_pool.get(addr)
+                            )
                             self._process_radar_candidate(addr, snapshot)
             except asyncio.CancelledError:
                 raise
@@ -254,6 +321,7 @@ class TradingEngine:
                 logger.exception("Failed to refresh radar pool")
             else:
                 self._mark_worker_success("radar")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(self.settings.radar_poll_seconds)
 
     async def monitor_watchlist(self) -> None:
@@ -266,14 +334,18 @@ class TradingEngine:
                     self._mark_worker_success("watchlist")
                     await asyncio.sleep(self.settings.observation_poll_seconds)
                     continue
-                snapshots = await asyncio.to_thread(self.market_data.fetch_snapshots, list(self.watchlist.keys()))
+                snapshots = await asyncio.to_thread(
+                    self.market_data.fetch_snapshots, list(self.watchlist.keys())
+                )
                 for addr in list(self.watchlist.keys()):
                     snapshot = snapshots.get(addr)
                     if snapshot is None:
                         self._mark_watch_snapshot_pending(addr)
                         candidate = self.watchlist.get(addr)
                         if candidate and int(candidate.get("snapshot_miss_count", 0)) >= 8:
-                            self._reject_watch_candidate(addr, candidate["scan"], "连续无实时成交快照，释放观察位")
+                            self._reject_watch_candidate(
+                                addr, candidate["scan"], "连续无实时成交快照，释放观察位"
+                            )
                         continue
                     await self._process_watch_candidate(addr, snapshot)
             except asyncio.CancelledError:
@@ -283,24 +355,27 @@ class TradingEngine:
                 logger.exception("Failed to refresh watchlist")
             else:
                 self._mark_worker_success("watchlist")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(self.settings.observation_poll_seconds)
 
     async def _maybe_open_position(self, scan: dict) -> None:
+        scan_model = scan if isinstance(scan, CandidateScan) else CandidateScan.from_mapping(scan)
+        scan_payload = scan_model.to_dict()
         wallet = self.database.wallet()
-        allowed, reason = self._should_open_position(scan, wallet)
+        allowed, reason = self._should_open_position(scan_model, wallet)
         if not allowed:
-            logger.debug("Skipped %s: %s", scan["symbol"], reason)
+            logger.debug("Skipped %s: %s", scan_model.symbol, reason)
             self.decision_audit_service.record_entry_blocked(
-                scan,
+                scan_payload,
                 reason,
                 strategy_mode=self.strategy_state.mode,
                 wallet=wallet,
             )
             return
-        position_size_usd = self._position_size_usd(scan, wallet)
+        position_size_usd = self._position_size_usd(scan_model, wallet)
         if position_size_usd <= 0:
             self.decision_audit_service.record_entry_blocked(
-                scan,
+                scan_payload,
                 "position sizing produced zero",
                 strategy_mode=self.strategy_state.mode,
                 wallet=wallet,
@@ -308,46 +383,111 @@ class TradingEngine:
             )
             return
 
-        result = self.executor.buy(scan["addr"], position_size_usd)
-        if not result.executed:
-            logger.warning("Buy skipped for %s: %s", scan["symbol"], result.reason)
+        order_key = self._entry_idempotency_key(scan_payload, position_size_usd)
+        idempotency_record, created = self.database.claim_order_idempotency(
+            order_key,
+            source="engine",
+            side="buy",
+            addr=scan_model.addr,
+            symbol=scan_model.symbol or "UNK",
+            amount_usd=position_size_usd,
+            request_fingerprint=(
+                f"{scan_model.scan_time}|{scan_model.score}|{position_size_usd:.2f}"
+            ),
+            request={
+                "addr": scan_model.addr,
+                "symbol": scan_model.symbol,
+                "position_size_usd": position_size_usd,
+                "score": scan_model.score,
+            },
+        )
+        if not created and str(idempotency_record.get("status") or "") == "executed":
             self.decision_audit_service.record_entry_execution_skipped(
-                scan,
+                scan_payload,
+                "duplicate automated buy order already executed",
+                strategy_mode=self.strategy_state.mode,
+                position_size_usd=position_size_usd,
+                execution_mode=str(idempotency_record.get("source") or "engine"),
+                wallet=wallet,
+            )
+            return
+        if not self.runtime_safety.claim_order_key(
+            order_key,
+            side="buy",
+            token_mint=scan_model.addr,
+            amount_usd=position_size_usd,
+        ):
+            self.decision_audit_service.record_entry_execution_skipped(
+                scan_payload,
+                "duplicate automated buy order blocked by idempotency guard",
+                strategy_mode=self.strategy_state.mode,
+                position_size_usd=position_size_usd,
+                execution_mode="auto",
+                wallet=wallet,
+            )
+            self.database.update_order_idempotency(
+                order_key,
+                status="blocked",
+                result={"reason": "duplicate automated buy order blocked by idempotency guard"},
+            )
+            return
+
+        result = self.executor.buy(scan_model.addr, position_size_usd, idempotency_key=order_key)
+        if not result.executed:
+            logger.warning("Buy skipped for %s: %s", scan_model.symbol, result.reason)
+            self.decision_audit_service.record_entry_execution_skipped(
+                scan_payload,
                 result.reason or "execution skipped",
                 strategy_mode=self.strategy_state.mode,
                 position_size_usd=position_size_usd,
                 execution_mode=result.mode,
                 wallet=wallet,
             )
+            self.database.update_order_idempotency(
+                order_key,
+                status="failed",
+                result={"reason": result.reason or "execution skipped", "mode": result.mode},
+                tx_hash=result.tx_hash,
+            )
             return
 
-        effective_buy_price = self._paper_adjusted_buy_price(scan["price"], result.mode)
-        entry_reason = self._entry_reason(scan, position_size_usd)
+        effective_buy_price = self._paper_adjusted_buy_price(scan_model.price, result.mode)
+        entry_reason = self._entry_reason(scan_payload, position_size_usd)
         self.database.open_position(
-            addr=scan["addr"],
-            symbol=scan["symbol"],
+            addr=scan_model.addr,
+            symbol=scan_model.symbol,
             price=effective_buy_price,
             amount_usd=position_size_usd,
             mode=result.mode,
             entry_tx=result.tx_hash,
-            entry_liquidity=float(scan["liquidity"]),
+            entry_liquidity=scan_model.liquidity,
             metrics={
                 "entry_reason": entry_reason,
-                "entry_score": scan["score"],
-                "entry_dev_buy": scan["dev_buy"],
-                "entry_liquidity": scan["liquidity"],
-                "entry_token_age": self._token_age_text(scan),
-                "raw_market_price": scan["price"],
+                "entry_score": scan_model.score,
+                "entry_dev_buy": scan_model.dev_buy,
+                "entry_liquidity": scan_model.liquidity,
+                "entry_token_age": self._token_age_text(scan_payload),
+                "raw_market_price": scan_model.price,
                 "effective_entry_price": effective_buy_price,
-                "narrative_score": scan.get("narrative_score", 0),
-                "narrative_tags": scan.get("narrative_tags", []),
-                "scalp_override": bool(scan.get("scalp_override")),
-                "scalp_reason": scan.get("scalp_reason", ""),
+                "narrative_score": scan_model.get("narrative_score", 0),
+                "narrative_tags": scan_model.get("narrative_tags", []),
+                "scalp_override": bool(scan_model.get("scalp_override")),
+                "scalp_reason": scan_model.get("scalp_reason", ""),
             },
         )
         self.database.update_wallet_for_buy(position_size_usd)
+        trade_history_id = self.database.find_trade_history_id(
+            addr=scan_model.addr, side="buy", tx_hash=result.tx_hash
+        )
+        self.database.update_order_idempotency(
+            order_key,
+            status="executed",
+            result={"mode": result.mode, "tx_hash": result.tx_hash},
+            tx_hash=result.tx_hash,
+            trade_history_id=trade_history_id,
+        )
         self.decision_audit_service.record_entry_opened(
-            scan,
+            scan_payload,
             strategy_mode=self.strategy_state.mode,
             position_size_usd=position_size_usd,
             execution_mode=result.mode,
@@ -357,20 +497,20 @@ class TradingEngine:
             wallet=wallet,
         )
         self.opportunity_service.record_signal(
-            scan,
+            scan_payload,
             (
-                f"score={scan['score']:.0f}, age={self._token_age_text(scan)}, "
-                f"dev_buy={scan['dev_buy']:.2f} SOL, liq=${scan['liquidity']:.0f}, "
-                f"narrative={scan.get('narrative_label', '-')}, "
-                f"bundle={self._bundle_risk_label(float(scan.get('bundle_risk_score') or 0))}, size=${position_size_usd:.2f}"
+                f"score={scan_model.score:.0f}, age={self._token_age_text(scan_payload)}, "
+                f"dev_buy={scan_model.dev_buy:.2f} SOL, liq=${scan_model.liquidity:.0f}, "
+                f"narrative={scan_model.get('narrative_label', '-')}, "
+                f"bundle={self._bundle_risk_label(float(scan_model.get('bundle_risk_score') or 0))}, size=${position_size_usd:.2f}"
             ),
         )
         self.last_buy_ts = time.time()
         logger.info(
             "Opened %s position for %s | score=%.0f size=$%.2f buy_price=%.10f",
             result.mode,
-            scan["symbol"],
-            scan["score"],
+            scan_model.symbol,
+            scan_model.score,
             position_size_usd,
             effective_buy_price,
         )
@@ -402,7 +542,7 @@ class TradingEngine:
                 f"进入观察池: age={self._token_age_text(scan)}, score={scan['score']:.0f}, "
                 f"quality={float(scan.get('launch_quality_score') or 0):.0f}, "
                 f"narrative={scan.get('narrative_label', '-')}, "
-                f"dev={scan['dev_buy']:.2f} SOL, liq=${scan['liquidity']:.0f}, top10={float(scan.get('top10_owner_pct') or 0)*100:.1f}%"
+                f"dev={scan['dev_buy']:.2f} SOL, liq=${scan['liquidity']:.0f}, top10={float(scan.get('top10_owner_pct') or 0) * 100:.1f}%"
             ),
         )
 
@@ -461,12 +601,18 @@ class TradingEngine:
         await self._maybe_open_position(decision.scan)
         if self.database.has_position(addr):
             self.watchlist.pop(addr, None)
-            self.opportunity_service.record_confirmed(decision.scan, decision.open_reason or "watch confirmed")
+            self.opportunity_service.record_confirmed(
+                decision.scan, decision.open_reason or "watch confirmed"
+            )
 
-    def _update_watch_reason(self, scan: dict, elapsed: int, price_change_pct: float, liquidity_ratio: float) -> None:
+    def _update_watch_reason(
+        self, scan: dict, elapsed: int, price_change_pct: float, liquidity_ratio: float
+    ) -> None:
         self.opportunity_service.record_watch(
             scan,
-            self.observation_service.watch_update_reason(scan, elapsed, price_change_pct, liquidity_ratio),
+            self.observation_service.watch_update_reason(
+                scan, elapsed, price_change_pct, liquidity_ratio
+            ),
         )
 
     def _reject_watch_candidate(self, addr: str, scan: dict, reason: str) -> None:
@@ -492,7 +638,9 @@ class TradingEngine:
         for addr, removed_scan, reason in self.watchlist_service.trim_to_limit(self.watchlist):
             self._reject_watch_candidate(addr, removed_scan, reason)
 
-    def _prune_watchlist_for_new_candidate(self, scan: dict) -> tuple[bool, Optional[tuple[str, dict, str]]]:
+    def _prune_watchlist_for_new_candidate(
+        self, scan: dict
+    ) -> tuple[bool, Optional[tuple[str, dict, str]]]:
         return self.watchlist_service.prune_for_new_candidate(self.watchlist, scan)
 
     def _holder_ok(self, scan: dict) -> tuple[bool, str]:
@@ -504,7 +652,7 @@ class TradingEngine:
     def _refresh_strategy_state(self) -> None:
         previous_mode = self.strategy_state.mode
         state = self.risk_service.evaluate_strategy_state(
-            self.database.recent_sell_trades(limit=30),
+            self.database.recent_sell_trade_models(limit=30),
             self.strategy_state,
         )
         if state.mode != previous_mode:
@@ -556,10 +704,10 @@ class TradingEngine:
             self._mark_worker_running("positions")
             try:
                 await self._sync_realtime_tokens()
-                positions = self.database.open_positions()
+                positions = self.database.open_position_models()
                 price_map = await asyncio.to_thread(
                     self.market_data.fetch_snapshots,
-                    [position["addr"] for position in positions],
+                    [position.addr for position in positions],
                 )
                 for position in positions:
                     await self._process_position(position, price_map)
@@ -570,14 +718,24 @@ class TradingEngine:
                 logger.exception("Failed to refresh positions")
             else:
                 self._mark_worker_success("positions")
+            self.runtime_safety.ensure_runtime_active()
             await asyncio.sleep(self.settings.pricing_poll_seconds)
 
-    async def _process_position(self, position: dict, price_map: dict[str, dict]) -> None:
-        addr = position["addr"]
+    async def _process_position(
+        self, position: dict | PortfolioPosition, price_map: dict[str, dict]
+    ) -> None:
+        self.runtime_safety.ensure_runtime_active()
+        position_model = (
+            position
+            if isinstance(position, PortfolioPosition)
+            else PortfolioPosition.from_mapping(position)
+        )
+        position_payload = position_model.to_dict()
+        addr = position_model.addr
         snapshot = price_map.get(addr)
         if not snapshot:
             return
-        decision = await self.position_service.evaluate_position(position, snapshot)
+        decision = await self.position_service.evaluate_position(position_payload, snapshot)
         if decision is None:
             return
 
@@ -593,26 +751,83 @@ class TradingEngine:
 
         if decision.sell_amount_usd <= 0:
             self.decision_audit_service.record_exit_execution_skipped(
-                position,
+                position_payload,
                 decision,
                 "sell amount resolved to zero",
-                execution_mode=str(position.get("mode") or "unknown"),
+                execution_mode=position_model.mode or "unknown",
                 market_snapshot=snapshot,
             )
             return
-        result = self.executor.sell(addr, decision.sell_amount_usd)
-        if not result.executed:
-            logger.warning("Sell skipped for %s: %s", position["symbol"], result.reason)
+        order_key = self._exit_idempotency_key(position_payload, decision, snapshot)
+        idempotency_record, created = self.database.claim_order_idempotency(
+            order_key,
+            source="engine",
+            side="sell",
+            addr=addr,
+            symbol=position_model.symbol or "UNK",
+            amount_usd=float(decision.sell_amount_usd or 0.0),
+            request_fingerprint=(
+                f"{getattr(decision, 'exit_reason', '')}|"
+                f"{float(getattr(decision, 'sell_fraction', 0.0)):.4f}|"
+                f"{float(getattr(decision, 'sell_amount_usd', 0.0)):.2f}"
+            ),
+            request={
+                "addr": addr,
+                "symbol": position_model.symbol,
+                "exit_reason": getattr(decision, "exit_reason", ""),
+                "sell_fraction": float(getattr(decision, "sell_fraction", 0.0)),
+                "sell_amount_usd": float(getattr(decision, "sell_amount_usd", 0.0)),
+            },
+        )
+        if not created and str(idempotency_record.get("status") or "") == "executed":
             self.decision_audit_service.record_exit_execution_skipped(
-                position,
+                position_payload,
+                decision,
+                "duplicate automated sell order already executed",
+                execution_mode=str(idempotency_record.get("source") or "engine"),
+                market_snapshot=snapshot,
+            )
+            return
+        if not self.runtime_safety.claim_order_key(
+            order_key,
+            side="sell",
+            token_mint=addr,
+            amount_usd=decision.sell_amount_usd,
+        ):
+            self.decision_audit_service.record_exit_execution_skipped(
+                position_payload,
+                decision,
+                "duplicate automated sell order blocked by idempotency guard",
+                execution_mode=position_model.mode or "unknown",
+                market_snapshot=snapshot,
+            )
+            self.database.update_order_idempotency(
+                order_key,
+                status="blocked",
+                result={"reason": "duplicate automated sell order blocked by idempotency guard"},
+            )
+            return
+        result = self.executor.sell(addr, decision.sell_amount_usd, idempotency_key=order_key)
+        if not result.executed:
+            logger.warning("Sell skipped for %s: %s", position_model.symbol, result.reason)
+            self.decision_audit_service.record_exit_execution_skipped(
+                position_payload,
                 decision,
                 result.reason or "execution skipped",
                 execution_mode=result.mode,
                 market_snapshot=snapshot,
             )
+            self.database.update_order_idempotency(
+                order_key,
+                status="failed",
+                result={"reason": result.reason or "execution skipped", "mode": result.mode},
+                tx_hash=result.tx_hash,
+            )
             return
 
-        proceeds_usd = self._sale_proceeds(decision.sell_amount_usd, decision.pnl_pct, position["mode"])
+        proceeds_usd = self._sale_proceeds(
+            decision.sell_amount_usd, decision.pnl_pct, position_model.mode
+        )
         self.database.update_wallet_for_sell(decision.sell_amount_usd, proceeds_usd)
         metrics = {
             "gross_market_price": decision.current_price,
@@ -622,10 +837,13 @@ class TradingEngine:
             "sell_fraction": decision.sell_fraction,
             **decision.exit_context,
         }
-        if decision.remaining_amount_usd <= self.settings.moonbag_min_usd or decision.sell_fraction >= 0.999:
+        if (
+            decision.remaining_amount_usd <= self.settings.moonbag_min_usd
+            or decision.sell_fraction >= 0.999
+        ):
             self.database.close_position(
                 addr=addr,
-                symbol=position["symbol"],
+                symbol=position_model.symbol,
                 exit_price=decision.sell_price,
                 amount_usd=decision.sell_amount_usd,
                 pnl_pct=decision.pnl_pct,
@@ -635,7 +853,7 @@ class TradingEngine:
         else:
             self.database.reduce_position(
                 addr=addr,
-                symbol=position["symbol"],
+                symbol=position_model.symbol,
                 exit_price=decision.sell_price,
                 sold_amount_usd=decision.sell_amount_usd,
                 remaining_amount_usd=decision.remaining_amount_usd,
@@ -644,22 +862,50 @@ class TradingEngine:
                 metrics=metrics,
             )
         self.decision_audit_service.record_exit_executed(
-            position,
+            position_payload,
             decision,
             execution_mode=result.mode,
             tx_hash=result.tx_hash,
             market_snapshot=snapshot,
         )
+        trade_history_id = self.database.find_trade_history_id(
+            addr=addr, side="sell", tx_hash=result.tx_hash
+        )
+        self.database.update_order_idempotency(
+            order_key,
+            status="executed",
+            result={
+                "mode": result.mode,
+                "tx_hash": result.tx_hash,
+                "exit_reason": decision.exit_reason,
+            },
+            tx_hash=result.tx_hash,
+            trade_history_id=trade_history_id,
+        )
+        abnormal_reasons = {
+            "emergency_stop",
+            "liquidity_break",
+            "holder_risk_cut",
+            "zombie_position_exit",
+        }
+        self.runtime_safety.record_exit_result(
+            abnormal=bool(decision.exit_reason in abnormal_reasons),
+            reason=str(decision.exit_reason or ""),
+        )
         logger.info(
             "Sold %.0f%% of %s position for %s at %.2f%% reason=%s",
             decision.sell_fraction * 100,
             result.mode,
-            position["symbol"],
+            position_model.symbol,
             decision.pnl_pct * 100,
             decision.exit_reason,
         )
 
     def _should_open_position(self, scan: dict, wallet: dict) -> tuple[bool, str]:
+        self.runtime_safety.enforce_daily_loss_limit(self.database.recent_sell_trades(limit=200))
+        runtime_allowed, runtime_reason = self.runtime_safety.can_open_new_positions()
+        if not runtime_allowed:
+            return False, runtime_reason
         decision = self.risk_service.should_open_position(
             scan,
             wallet,
@@ -670,7 +916,9 @@ class TradingEngine:
         )
         return decision.allowed, decision.reason
 
-    async def _holder_risk_exit_reason(self, position: dict, pnl_pct: float, hold_seconds: int) -> Optional[str]:
+    async def _holder_risk_exit_reason(
+        self, position: dict, pnl_pct: float, hold_seconds: int
+    ) -> Optional[str]:
         return await self.position_service.holder_risk_exit_reason(position, pnl_pct, hold_seconds)
 
     def _position_size_usd(self, scan: dict, wallet: dict) -> float:
@@ -694,14 +942,26 @@ class TradingEngine:
     def _entry_reason(self, scan: dict, position_size_usd: float) -> str:
         return self.position_service.entry_reason(scan, position_size_usd)
 
-    def _observation_bonus(self, price_change_pct: float, liquidity_ratio: float, elapsed: int) -> float:
+    def _observation_bonus(
+        self, price_change_pct: float, liquidity_ratio: float, elapsed: int
+    ) -> float:
         return self.signal_scorer.observation_bonus(price_change_pct, liquidity_ratio, elapsed)
 
-    def _radar_momentum_bonus(self, price_change_pct: float, liquidity_ratio: float, elapsed: int) -> float:
+    def _radar_momentum_bonus(
+        self, price_change_pct: float, liquidity_ratio: float, elapsed: int
+    ) -> float:
         return self.signal_scorer.radar_momentum_bonus(price_change_pct, liquidity_ratio, elapsed)
 
-    def _market_quality_score(self, scan: dict, price_change_pct: float = 0.0, liquidity_ratio: float = 1.0, elapsed: int = 0) -> float:
-        return self.signal_scorer.market_quality_score(scan, price_change_pct, liquidity_ratio, elapsed)
+    def _market_quality_score(
+        self,
+        scan: dict,
+        price_change_pct: float = 0.0,
+        liquidity_ratio: float = 1.0,
+        elapsed: int = 0,
+    ) -> float:
+        return self.signal_scorer.market_quality_score(
+            scan, price_change_pct, liquidity_ratio, elapsed
+        )
 
     async def _refresh_candidate_holder_metrics(self, addr: str, candidate: Optional[dict]) -> None:
         await self.enrichment_service.refresh_candidate_holder_metrics(addr, candidate)
@@ -716,7 +976,9 @@ class TradingEngine:
 
     async def _refresh_unknown_metadata(self) -> None:
         try:
-            await self.enrichment_service.refresh_unknown_metadata((self.radar_pool, self.watchlist))
+            await self.enrichment_service.refresh_unknown_metadata(
+                (self.radar_pool, self.watchlist)
+            )
         except Exception:
             logger.debug("Token metadata refresh failed", exc_info=True)
 
@@ -772,8 +1034,8 @@ class TradingEngine:
                 True,
                 (
                     "异常K线: 低成交机械拉升 "
-                    f"gain={gain_pct*100:.1f}%, drawdown={max_drawdown_pct*100:.1f}%, "
-                    f"down_moves={down_move_ratio*100:.0f}%, volume5m=${volume_5m:.0f}"
+                    f"gain={gain_pct * 100:.1f}%, drawdown={max_drawdown_pct * 100:.1f}%, "
+                    f"down_moves={down_move_ratio * 100:.0f}%, volume5m=${volume_5m:.0f}"
                 ),
             )
         return False, ""
@@ -785,7 +1047,9 @@ class TradingEngine:
         drawdown_pct: float,
         liquidity_ratio: float,
     ) -> str:
-        return self.watchlist_service.watch_status_reason(elapsed, price_change_pct, drawdown_pct, liquidity_ratio)
+        return self.watchlist_service.watch_status_reason(
+            elapsed, price_change_pct, drawdown_pct, liquidity_ratio
+        )
 
     def _watch_status_reason_with_snapshot(
         self,
@@ -818,11 +1082,19 @@ class TradingEngine:
     async def _sync_realtime_tokens(self) -> None:
         priority = []
         seen = set()
-        for addr in [position["addr"] for position in self.database.open_positions()] + list(self.watchlist.keys()) + list(self.radar_pool.keys()):
+        for addr in (
+            [position["addr"] for position in self.database.open_positions()]
+            + list(self.watchlist.keys())
+            + list(self.radar_pool.keys())
+        ):
             if addr and addr not in seen:
                 priority.append(addr)
                 seen.add(addr)
-        limit = self.settings.max_radar_tracked_tokens + self.settings.max_watchlist_size + self.settings.max_open_positions
+        limit = (
+            self.settings.max_radar_tracked_tokens
+            + self.settings.max_watchlist_size
+            + self.settings.max_open_positions
+        )
         await self.market_data.set_tracked_tokens(priority[:limit])
 
     def _progress_from_liquidity(self, liquidity_usd: float) -> str:
@@ -843,7 +1115,9 @@ class TradingEngine:
         pnl_pct: float,
         hold_seconds: int,
     ) -> Tuple[Optional[str], dict, float]:
-        return self.position_service.dynamic_exit_signal(position, snapshot, sell_price, max_price, pnl_pct, hold_seconds)
+        return self.position_service.dynamic_exit_signal(
+            position, snapshot, sell_price, max_price, pnl_pct, hold_seconds
+        )
 
     def _zombie_exit_reason(
         self,
@@ -853,7 +1127,25 @@ class TradingEngine:
         hold_seconds: int,
         volume_5m: float,
     ) -> Optional[str]:
-        return self.position_service.zombie_exit_reason(position, snapshot, pnl_pct, hold_seconds, volume_5m)
+        return self.position_service.zombie_exit_reason(
+            position, snapshot, pnl_pct, hold_seconds, volume_5m
+        )
 
     def _hold_seconds(self, buy_time: str) -> int:
         return self.position_service.hold_seconds(buy_time)
+
+    def close(self) -> None:
+        self.runtime_safety.note_clean_shutdown()
+
+    def _entry_idempotency_key(self, scan: dict, position_size_usd: float) -> str:
+        created_ts = int(scan.get("created_ts") or scan.get("first_seen_ts") or 0)
+        score = int(round(float(scan.get("score") or 0.0)))
+        return f"auto-buy:{scan['addr']}:{created_ts}:{score}:{position_size_usd:.2f}"
+
+    def _exit_idempotency_key(self, position: dict, decision, snapshot: dict) -> str:
+        snapshot_ts = int(float(snapshot.get("timestamp") or time.time()))
+        return (
+            f"auto-sell:{position['addr']}:{getattr(decision, 'exit_reason', '')}:"
+            f"{float(getattr(decision, 'sell_fraction', 0.0)):.4f}:"
+            f"{float(getattr(decision, 'sell_amount_usd', 0.0)):.2f}:{snapshot_ts}"
+        )

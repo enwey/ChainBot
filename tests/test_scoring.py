@@ -65,7 +65,14 @@ class SignalScorerTests(unittest.TestCase):
         self.assertEqual(score, 100.0)
         self.assertEqual(
             signals,
-            ["clean_symbol", "dev_buy_ok", "early_liquidity_ok", "narrative", "socials", "high_base_score"],
+            [
+                "clean_symbol",
+                "dev_buy_ok",
+                "early_liquidity_ok",
+                "narrative",
+                "socials",
+                "high_base_score",
+            ],
         )
 
     def test_holder_ok_rejects_overconcentrated_supply(self) -> None:

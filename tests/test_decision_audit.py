@@ -17,6 +17,7 @@ if str(SRC) not in sys.path:
 from investment_automation.db import Database
 from investment_automation.engine import TradingEngine
 from investment_automation.execution import ExecutionResult
+from investment_automation.models import CandidateScan, PortfolioPosition
 from investment_automation.position import PositionExitDecision
 from investment_automation.settings import Settings
 
@@ -34,10 +35,14 @@ class StubExecutor:
         self.buy_result = ExecutionResult(executed=True, mode="paper", tx_hash="tx-buy")
         self.sell_result = ExecutionResult(executed=True, mode="paper", tx_hash="tx-sell")
 
-    def buy(self, token_mint: str, amount_usd: float) -> ExecutionResult:
+    def buy(
+        self, token_mint: str, amount_usd: float, *, idempotency_key: str | None = None
+    ) -> ExecutionResult:
         return self.buy_result
 
-    def sell(self, token_mint: str, amount_usd: float) -> ExecutionResult:
+    def sell(
+        self, token_mint: str, amount_usd: float, *, idempotency_key: str | None = None
+    ) -> ExecutionResult:
         return self.sell_result
 
 
@@ -85,12 +90,15 @@ class DecisionAuditTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_records_blocked_and_opened_entry_decisions(self) -> None:
-        blocked_scan = self._scan("token-blocked", "BLK")
-        self.engine._should_open_position = lambda scan, wallet: (False, "score below adaptive threshold 85")  # type: ignore[method-assign]
+        blocked_scan = CandidateScan.from_mapping(self._scan("token-blocked", "BLK"))
+        self.engine._should_open_position = lambda scan, wallet: (
+            False,
+            "score below adaptive threshold 85",
+        )  # type: ignore[method-assign]
 
         asyncio.run(self.engine._maybe_open_position(blocked_scan))
 
-        opened_scan = self._scan("token-opened", "OPN")
+        opened_scan = CandidateScan.from_mapping(self._scan("token-opened", "OPN"))
         self.engine._should_open_position = lambda scan, wallet: (True, "ok")  # type: ignore[method-assign]
         self.engine._position_size_usd = lambda scan, wallet: 12.5  # type: ignore[method-assign]
 
@@ -122,7 +130,7 @@ class DecisionAuditTests(unittest.TestCase):
             "tx-buy-1",
             entry_liquidity=4200.0,
         )
-        position = self.database.open_positions()[0]
+        position = PortfolioPosition.from_mapping(self.database.open_positions()[0])
         decision = PositionExitDecision(
             current_price=1.2,
             sell_price=1.18,
@@ -140,7 +148,13 @@ class DecisionAuditTests(unittest.TestCase):
         asyncio.run(
             self.engine._process_position(
                 position,
-                {"token-exit": {"price": 1.2, "timestamp": int(time.time()), "source": "pumpportal"}},
+                {
+                    "token-exit": {
+                        "price": 1.2,
+                        "timestamp": int(time.time()),
+                        "source": "pumpportal",
+                    }
+                },
             )
         )
 
@@ -153,7 +167,9 @@ class DecisionAuditTests(unittest.TestCase):
             "tx-buy-2",
             entry_liquidity=4200.0,
         )
-        skipped_position = next(item for item in self.database.open_positions() if item["addr"] == "token-skip")
+        skipped_position = next(
+            item for item in self.database.open_positions() if item["addr"] == "token-skip"
+        )
         skipped_decision = PositionExitDecision(
             current_price=1.1,
             sell_price=1.08,
@@ -167,12 +183,20 @@ class DecisionAuditTests(unittest.TestCase):
             remaining_amount_usd=2.5,
         )
         self.engine.position_service.evaluate_position = AsyncMock(return_value=skipped_decision)  # type: ignore[method-assign]
-        self.executor.sell_result = ExecutionResult(executed=False, mode="paper", reason="venue unavailable")
+        self.executor.sell_result = ExecutionResult(
+            executed=False, mode="paper", reason="venue unavailable"
+        )
 
         asyncio.run(
             self.engine._process_position(
                 skipped_position,
-                {"token-skip": {"price": 1.1, "timestamp": int(time.time()), "source": "pumpportal"}},
+                {
+                    "token-skip": {
+                        "price": 1.1,
+                        "timestamp": int(time.time()),
+                        "source": "pumpportal",
+                    }
+                },
             )
         )
 
@@ -184,7 +208,9 @@ class DecisionAuditTests(unittest.TestCase):
         self.assertEqual(audits[0]["context"]["execution_reason"], "venue unavailable")
         self.assertEqual(audits[0]["snapshot"]["kind"], "exit")
         self.assertEqual(audits[0]["snapshot"]["market_snapshot"]["source"], "pumpportal")
-        self.assertEqual(audits[0]["snapshot"]["decision"]["exit_reason"], "profit_lock_weak_follow")
+        self.assertEqual(
+            audits[0]["snapshot"]["decision"]["exit_reason"], "profit_lock_weak_follow"
+        )
         self.assertEqual(audits[1]["category"], "exit")
         self.assertEqual(audits[1]["outcome"], "executed")
         self.assertEqual(audits[1]["addr"], "token-exit")
@@ -192,6 +218,80 @@ class DecisionAuditTests(unittest.TestCase):
         self.assertEqual(audits[1]["context"]["tx_hash"], "tx-sell")
         self.assertEqual(audits[1]["snapshot"]["position"]["symbol"], "EXT")
         self.assertEqual(audits[1]["snapshot"]["decision"]["sell_amount_usd"], 15.0)
+
+    def test_blocks_duplicate_automated_entry_by_idempotency_key(self) -> None:
+        scan = self._scan("token-dup-buy", "DBUY")
+        self.engine._should_open_position = lambda scan, wallet: (True, "ok")  # type: ignore[method-assign]
+        self.engine._position_size_usd = lambda scan, wallet: 12.5  # type: ignore[method-assign]
+        self.engine._entry_idempotency_key = lambda scan, size: "dup-buy-key"  # type: ignore[method-assign]
+        self.engine.runtime_safety.claim_order_key(
+            "dup-buy-key",
+            side="buy",
+            token_mint=scan["addr"],
+            amount_usd=12.5,
+        )
+
+        asyncio.run(self.engine._maybe_open_position(scan))
+
+        audits = self.database.get_decision_audit(limit=5)
+        self.assertEqual(audits[0]["category"], "entry")
+        self.assertEqual(audits[0]["outcome"], "skipped")
+        self.assertEqual(
+            audits[0]["reason"], "duplicate automated buy order blocked by idempotency guard"
+        )
+
+    def test_blocks_duplicate_automated_exit_by_idempotency_key(self) -> None:
+        self.database.open_position(
+            "token-dup-sell",
+            "DSEL",
+            1.0,
+            15.0,
+            "paper",
+            "tx-buy-dup",
+            entry_liquidity=4200.0,
+        )
+        position = self.database.open_positions()[0]
+        decision = PositionExitDecision(
+            current_price=1.1,
+            sell_price=1.08,
+            max_price=1.15,
+            pnl_pct=0.08,
+            hold_seconds=30,
+            exit_reason="profit_lock_weak_follow",
+            exit_context={"volume_to_position_ratio": 0.8},
+            sell_fraction=0.75,
+            sell_amount_usd=7.5,
+            remaining_amount_usd=2.5,
+        )
+        self.engine.position_service.evaluate_position = AsyncMock(return_value=decision)  # type: ignore[method-assign]
+        self.engine._exit_idempotency_key = lambda position, decision, snapshot: "dup-sell-key"  # type: ignore[method-assign]
+        self.engine.runtime_safety.claim_order_key(
+            "dup-sell-key",
+            side="sell",
+            token_mint=position["addr"],
+            amount_usd=7.5,
+        )
+
+        asyncio.run(
+            self.engine._process_position(
+                position,
+                {
+                    "token-dup-sell": {
+                        "price": 1.1,
+                        "timestamp": int(time.time()),
+                        "source": "pumpportal",
+                    }
+                },
+            )
+        )
+
+        audits = self.database.get_decision_audit(limit=5)
+        self.assertEqual(audits[0]["category"], "exit")
+        self.assertEqual(audits[0]["outcome"], "skipped")
+        self.assertEqual(
+            audits[0]["context"]["execution_reason"],
+            "duplicate automated sell order blocked by idempotency guard",
+        )
 
     def _scan(self, addr: str, symbol: str) -> dict:
         now_ts = int(time.time())
